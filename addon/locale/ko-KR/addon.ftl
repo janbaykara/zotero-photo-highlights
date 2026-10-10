@@ -68,21 +68,21 @@ menuHelp-openReddit = Reddit
 menuHelp-openForum = Zotero Forum
 userGuide-start-title = Zotero Syllabus에 오신 것을 환영합니다
 userGuide-start-desc =
-    어떤 Zotero 컬렉션이든 강의 읽기 목록으로 바꿀 수 있습니다. 수업별로 정리하고, 우선순위를 정하고, 다음에 읽을 것을 추적하세요.
+    Two ways to use a collection: Syllabus structures a course by class or week; Gallery is a reading list with covers and your own order — no classes required. Home, due dates, and an annotation feed sit alongside.
 userGuide-start-close = 나중에 알림
 userGuide-exit = 둘러보기 종료
 optional-features-intro-title = Choose your views
 optional-features-intro-desc =
-    Pick which surfaces to show. You can change these anytime in Preferences. Syllabus view is recommended to get started.
+    Syllabus is for courses (classes, priorities, due dates). Gallery is for a personal reading list (covers and reading order) and does not need a syllabus. Turn on the surfaces you want — you can change them anytime in Preferences.
 optional-features-syllabus-title = Syllabus view
 optional-features-syllabus-desc =
-    Structure a collection by class session, drag readings into place, and edit priorities and instructions.
+    For a course: structure a collection by class or week, drag readings into place, and set priorities and instructions. Use Turn into Syllabus on the collection first.
 optional-features-gallery-title = Gallery view
 optional-features-gallery-desc =
-    Browse a collection as covers, magazine spreads, or cards — great for finding the next thing to open.
+    For a reading list — no classes needed: browse covers, previews, or cards and set your own reading order. Works on any collection, including ones that are also a syllabus.
 optional-features-explorer-title = Home view
 optional-features-explorer-desc =
-    A library home with shelves for recent items, upcoming deadlines, and more.
+    A library home with shelves for pinned items, recently read, annotations, deadlines, and more.
 optional-features-reading-schedule-title = Reading Schedule
 optional-features-reading-schedule-desc =
     A calendar tab that gathers class due dates across your syllabi so you can see what’s next.
@@ -101,6 +101,9 @@ optional-features-continue-desc =
 userGuide-collection-title = 컬렉션에서 시작
 userGuide-collection-desc =
     강의계획서는 컬렉션에 있습니다. 샘플 읽기가 몇 편 들어 있는 “Syllabus Tour” 연습 컬렉션을 엽니다.
+userGuide-gallery-vs-syllabus-title = Gallery vs Syllabus
+userGuide-gallery-vs-syllabus-desc =
+    Same collection, two toolbar views. Gallery browses it as a reading list (covers and your own order). Syllabus organizes it by class or week for a course — after Turn into Syllabus. You can switch anytime; this tour continues with Syllabus.
 userGuide-syllabusButton-title = 강의계획서로 전환
 userGuide-syllabusButton-desc =
     항목 도구 모음에서 강의계획서로 전환을 클릭하면 이 컬렉션이 강의 개요로 전환됩니다. 투어가 그 화면으로 전환합니다.
@@ -124,7 +127,7 @@ userGuide-readingSchedule-light-desc =
     The Reading Schedule tab gathers class due dates across your syllabi. Next opens it from the tab bar.
 userGuide-home-title = Home view
 userGuide-home-desc =
-    At the library root, switch to Home for shelves of recent items and upcoming deadlines. Next selects your library home.
+    At the library root, switch to Home for shelves of pinned items, recently read, and upcoming deadlines. Next selects your library home.
 userGuide-subcollections-title = 선택 사항: 수업 폴더
 userGuide-subcollections-desc =
     수업마다 폴더 미러가 필요하신가요? 설정에서 수업 하위 컬렉션을 켜세요. 플러그인이 하위 폴더를 관리하기를 원하지 않으면 꺼 두세요.
@@ -220,12 +223,12 @@ page-drop-import-file = 파일을 놓아 이 컬렉션에 추가
 further-reading-heading = 추가 읽기
 sort-label = 정렬
 further-reading-sort-aria = 추가 읽기 정렬
-further-reading-add-readings-aria = 추가 읽기에 읽기 자료 추가
+further-reading-add-readings-aria = Add items to further reading
 sort-by-title = 제목
 sort-by-creator = 저자
 sort-by-date = 날짜
 further-reading-empty-desc = 이 섹션의 항목은 어떤 수업에도 배정되지 않았습니다.
-unnumbered-add-readings-aria = 번호 없는 섹션에 읽기 자료 추가
+unnumbered-add-readings-aria = Add items to the unnumbered section
 unnumbered-add-note-aria = 번호 없는 섹션에 노트 추가
 toc-empty = 수업이 없습니다
 placeholder-url = https://
@@ -244,8 +247,8 @@ class-move-down = { $nomenclature } 아래로 이동
 class-delete = { $nomenclature } 삭제
 class-insert-here = 여기에 { $nomenclature } 추가
 class-dropzone-hint = 항목을 { $nomenclature } { $number }(으)로 드래그
-class-add-readings = 읽기 자료 추가
-class-add-readings-aria = { $nomenclature } { $number }에 읽기 자료 추가
+class-add-readings = Add items
+class-add-readings-aria = Add items to { $nomenclature } { $number }
 class-add-note = 노트 추가
 class-note-priority = 수업 노트
 class-note-open = 노트 열기
@@ -371,9 +374,13 @@ priority-default-optional = 선택
 # Gallery
 gallery-pinned-header =
     Items you’ve pinned for quick access. Pin or unpin from an item’s context menu or the Reading Schedule. Collections you pin stay on Home and Reading Schedule, not in this folder.
-gallery-add-readings-aria = 이 컬렉션에 읽기 자료 추가
+gallery-add-readings-aria = Add items to this collection
+gallery-add-items = Add items
 gallery-empty-filtered = 일치하는 항목이 없습니다.
 gallery-empty = 이 컬렉션에 항목이 없습니다.
+gallery-empty-title = Start a reading list
+gallery-empty-desc =
+    Add papers, books, or articles to this collection. Choose Reading order in the sort menu to arrange them, and optionally add a short description under the title.
 gallery-untagged = 태그 없음
 gallery-untagged-desc = 이 섹션의 항목에는 태그가 없습니다.
 gallery-uncredited = 창작자 없음
@@ -382,7 +389,8 @@ gallery-empty-subcollections = 이 컬렉션에 하위 컬렉션이나 항목이
 gallery-unnumbered = 번호 없음
 gallery-unnumbered-desc = 수업 번호 없이 배정됨.
 gallery-sort-auto = 자동
-gallery-sort-auto-title = 자동 순서(개인 읽기 목록 → 수업 → 컬렉션)
+gallery-sort-auto-title = Automatic order (reading order when set, otherwise collection order)
+gallery-sort-auto-title-syllabus = Automatic order (reading order, then class, then collection)
 gallery-sort-az = A–Z
 gallery-sort-az-title = A–Z 정렬
 gallery-sort-date = 발행
@@ -392,6 +400,7 @@ gallery-sort-date-added-title = 추가일순 정렬(최신 우선)
 gallery-sort-personal-order = 읽기 순서
 gallery-sort-personal-order-title = 개인 읽기 순서(드래그로 재정렬)
 gallery-personal-order-unordered = 미정렬
+gallery-personal-order-unordered-empty = Drag items here to remove them from your reading order
 gallery-personal-order-landing-label = Reading order
 gallery-personal-order-landing-empty = Drag items here to set your reading order
 personal-reading-order-menu-add = 컬렉션 읽기 순서에 추가
@@ -417,7 +426,7 @@ gallery-group-classes-title = 수업별 그룹
 gallery-layout-cover = 표지
 gallery-layout-cover-title = 표지 이미지
 gallery-layout-card = 카드
-gallery-layout-card-title = 강의계획서 카드
+gallery-layout-card-title = Reading cards
 gallery-layout-annotations = 주석
 gallery-layout-annotations-title = 모든 주석이 있는 표지
 gallery-annotations-empty = 주석 없음
@@ -466,7 +475,7 @@ gallery-save-globally-title = 이 옵션을 모든 컬렉션의 기본값으로 
 gallery-save-globally-active-title = 이 컬렉션 설정이 기본값과 다릅니다. 클릭하면 기본값으로 저장합니다.
 galleryTour-settings-title = 갤러리 옵션
 galleryTour-settings-desc =
-    모서리 메뉴에서 보기, 정렬, 그룹을 바꿉니다. 세 가지 레이아웃을 차례로 보여 드립니다.
+    Gallery is your reading-list view for this collection (separate from Syllabus classes). Open the menu in the corner to switch layout, sort, and grouping — we’ll walk through the layouts.
 galleryTour-cover-title = 표지 보기
 galleryTour-cover-desc =
     표지는 각 항목을 커버 이미지로 보여 줍니다. 책, 논문, 웹 페이지를 한눈에 볼 수 있습니다.
@@ -475,7 +484,7 @@ galleryTour-magazine-desc =
     미리보기는 주석 보기처럼 표지 옆에 발췌를 보여 줍니다. 하이라이트 대신 소개 글입니다. 미리보기가 없는 항목은 표지 행에 놓입니다.
 galleryTour-card-title = 카드 보기
 galleryTour-card-desc =
-    카드는 강의계획과 같은 레이아웃이며, 항목 유형별로 묶어 비슷한 읽기 자료를 모읍니다.
+    Cards show title, creators, and notes in a reading column. Here they’re grouped by item type so similar items sit together.
 galleryTour-choose-title = 기본값 선택
 galleryTour-choose-desc =
     갤러리를 어떤 레이아웃으로 열까요? 나중에 Zotero Syllabus 환경설정이나 ‘기본값으로 저장’으로 바꿀 수 있습니다.
@@ -719,7 +728,7 @@ explorer-add-saved-search = Saved search…
 explorer-shelf-upcoming-deadlines = Upcoming reading deadlines
 explorer-shelf-upcoming-deadlines-desc = Due this week, or the next deadline within a month.
 explorer-shelf-pinned = Pinned
-explorer-shelf-pinned-desc = Items you’ve pinned, plus pinned collections (with next-up for syllabi).
+explorer-shelf-pinned-desc = Items and collections you’ve pinned for quick access.
 explorer-go-to-reading-schedule = Go to Reading Schedule
 explorer-go-to-my-annotations = Go to Annotation Feed
 explorer-shelf-watch-now = Watch now

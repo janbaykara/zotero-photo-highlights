@@ -68,21 +68,21 @@ menuHelp-openReddit = Reddit
 menuHelp-openForum = Zotero Forum
 userGuide-start-title = مرحبًا بك في Zotero Syllabus
 userGuide-start-desc =
-    حوّل أي مجموعة في Zotero إلى قائمة قراءات للمقرر — نظّمها حسب المحاضرة، وحدّد الأولويات، وتابع ما ينبغي قراءته تاليًا.
+    Two ways to use a collection: Syllabus structures a course by class or week; Gallery is a reading list with covers and your own order — no classes required. Home, due dates, and an annotation feed sit alongside.
 userGuide-start-close = تذكيري لاحقًا
 userGuide-exit = إنهاء الجولة
 optional-features-intro-title = Choose your views
 optional-features-intro-desc =
-    Pick which surfaces to show. You can change these anytime in Preferences. Syllabus view is recommended to get started.
+    Syllabus is for courses (classes, priorities, due dates). Gallery is for a personal reading list (covers and reading order) and does not need a syllabus. Turn on the surfaces you want — you can change them anytime in Preferences.
 optional-features-syllabus-title = Syllabus view
 optional-features-syllabus-desc =
-    Structure a collection by class session, drag readings into place, and edit priorities and instructions.
+    For a course: structure a collection by class or week, drag readings into place, and set priorities and instructions. Use Turn into Syllabus on the collection first.
 optional-features-gallery-title = Gallery view
 optional-features-gallery-desc =
-    Browse a collection as covers, magazine spreads, or cards — great for finding the next thing to open.
+    For a reading list — no classes needed: browse covers, previews, or cards and set your own reading order. Works on any collection, including ones that are also a syllabus.
 optional-features-explorer-title = Home view
 optional-features-explorer-desc =
-    A library home with shelves for recent items, upcoming deadlines, and more.
+    A library home with shelves for pinned items, recently read, annotations, deadlines, and more.
 optional-features-reading-schedule-title = Reading Schedule
 optional-features-reading-schedule-desc =
     A calendar tab that gathers class due dates across your syllabi so you can see what’s next.
@@ -101,6 +101,9 @@ optional-features-continue-desc =
 userGuide-collection-title = ابدأ من مجموعة
 userGuide-collection-desc =
     المناهج مرتبطة بالمجموعات. سنفتح مجموعة تجريبية باسم «جولة في المنهاج» تتضمن بعض القراءات النموذجية.
+userGuide-gallery-vs-syllabus-title = Gallery vs Syllabus
+userGuide-gallery-vs-syllabus-desc =
+    Same collection, two toolbar views. Gallery browses it as a reading list (covers and your own order). Syllabus organizes it by class or week for a course — after Turn into Syllabus. You can switch anytime; this tour continues with Syllabus.
 userGuide-syllabusButton-title = تحويل إلى منهاج
 userGuide-syllabusButton-desc =
     انقر «تحويل إلى منهاج» في شريط أدوات العناصر لتحويل هذه المجموعة إلى مخطط المقرر. ستنتقل الجولة إلى هناك نيابة عنك.
@@ -124,7 +127,7 @@ userGuide-readingSchedule-light-desc =
     The Reading Schedule tab gathers class due dates across your syllabi. Next opens it from the tab bar.
 userGuide-home-title = Home view
 userGuide-home-desc =
-    At the library root, switch to Home for shelves of recent items and upcoming deadlines. Next selects your library home.
+    At the library root, switch to Home for shelves of pinned items, recently read, and upcoming deadlines. Next selects your library home.
 userGuide-subcollections-title = اختياري: مجلدات المحاضرات
 userGuide-subcollections-desc =
     هل تريد مجلدات مطابقة لكل محاضرة؟ فعّل المجموعات الفرعية للمحاضرات في الإعدادات. اترك هذا معطّلًا ما لم ترد أن تدير الإضافة المجلدات الفرعية.
@@ -220,12 +223,12 @@ page-drop-import-file = أفلت الملفات لإضافتها إلى هذه �
 further-reading-heading = قراءات إضافية
 sort-label = فرز
 further-reading-sort-aria = فرز القراءات الإضافية
-further-reading-add-readings-aria = إضافة قراءات إلى القراءات الإضافية
+further-reading-add-readings-aria = Add items to further reading
 sort-by-title = العنوان
 sort-by-creator = المؤلف
 sort-by-date = التاريخ
 further-reading-empty-desc = لم تُعيَّن عناصر هذا القسم إلى أي محاضرة.
-unnumbered-add-readings-aria = إضافة قراءات إلى القسم غير المرقّم
+unnumbered-add-readings-aria = Add items to the unnumbered section
 unnumbered-add-note-aria = إضافة ملاحظة إلى القسم غير المرقّم
 toc-empty = لا توجد محاضرات متاحة
 placeholder-url = https://
@@ -244,8 +247,8 @@ class-move-down = نقل { $nomenclature } إلى الأسفل
 class-delete = حذف { $nomenclature }
 class-insert-here = إضافة { $nomenclature } هنا
 class-dropzone-hint = اسحب العناصر إلى { $nomenclature } { $number }
-class-add-readings = إضافة قراءات
-class-add-readings-aria = إضافة قراءات إلى { $nomenclature } { $number }
+class-add-readings = Add items
+class-add-readings-aria = Add items to { $nomenclature } { $number }
 class-add-note = إضافة ملاحظة
 class-note-priority = ملاحظة الحصة
 class-note-open = فتح الملاحظة
@@ -371,9 +374,13 @@ priority-default-optional = اختياري
 # Gallery
 gallery-pinned-header =
     Items you’ve pinned for quick access. Pin or unpin from an item’s context menu or the Reading Schedule. Collections you pin stay on Home and Reading Schedule, not in this folder.
-gallery-add-readings-aria = إضافة قراءات إلى هذه المجموعة
+gallery-add-readings-aria = Add items to this collection
+gallery-add-items = Add items
 gallery-empty-filtered = لا توجد عناصر مطابقة.
 gallery-empty = لا توجد عناصر في هذه المجموعة.
+gallery-empty-title = Start a reading list
+gallery-empty-desc =
+    Add papers, books, or articles to this collection. Choose Reading order in the sort menu to arrange them, and optionally add a short description under the title.
 gallery-untagged = بلا وسوم
 gallery-untagged-desc = عناصر هذا القسم بلا وسوم.
 gallery-uncredited = بلا منشئ
@@ -382,7 +389,8 @@ gallery-empty-subcollections = لا توجد مجموعات فرعية ولا ع
 gallery-unnumbered = بلا رقم
 gallery-unnumbered-desc = معيَّن دون رقم محاضرة.
 gallery-sort-auto = تلقائي
-gallery-sort-auto-title = ترتيب تلقائي (قائمة القراءة الشخصية، ثم الصف، ثم المجموعة)
+gallery-sort-auto-title = Automatic order (reading order when set, otherwise collection order)
+gallery-sort-auto-title-syllabus = Automatic order (reading order, then class, then collection)
 gallery-sort-az = أ–ي
 gallery-sort-az-title = فرز أ–ي
 gallery-sort-date = منشور
@@ -392,6 +400,7 @@ gallery-sort-date-added-title = الفرز حسب تاريخ الإضافة (ا�
 gallery-sort-personal-order = ترتيب القراءة
 gallery-sort-personal-order-title = ترتيب القراءة الشخصي (اسحب لإعادة الترتيب)
 gallery-personal-order-unordered = غير مرتب
+gallery-personal-order-unordered-empty = Drag items here to remove them from your reading order
 gallery-personal-order-landing-label = Reading order
 gallery-personal-order-landing-empty = Drag items here to set your reading order
 personal-reading-order-menu-add = إضافة إلى ترتيب قراءة المجموعة
@@ -417,7 +426,7 @@ gallery-group-classes-title = التجميع حسب المحاضرات
 gallery-layout-cover = الغلاف
 gallery-layout-cover-title = صورة الغلاف
 gallery-layout-card = بطاقة
-gallery-layout-card-title = بطاقات المنهاج
+gallery-layout-card-title = Reading cards
 gallery-layout-annotations = التعليقات
 gallery-layout-annotations-title = أغلفة مع كل التعليقات
 gallery-annotations-empty = لا توجد تعليقات
@@ -466,7 +475,7 @@ gallery-save-globally-title = حفظ هذا الخيار كافتراضي لجم
 gallery-save-globally-active-title = إعداد هذه المجموعة يختلف عن الافتراضي. انقر لحفظه كافتراضي.
 galleryTour-settings-title = خيارات المعرض
 galleryTour-settings-desc =
-    افتح القائمة في الزاوية لتغيير العرض والترتيب والتجميع. سنعرض التخطيطات الثلاثة.
+    Gallery is your reading-list view for this collection (separate from Syllabus classes). Open the menu in the corner to switch layout, sort, and grouping — we’ll walk through the layouts.
 galleryTour-cover-title = عرض الغلاف
 galleryTour-cover-desc =
     يعرض الغلاف كل عنصر كصورة غلاف — كتب ومقالات وصفحات ويب بنظرة واحدة.
@@ -475,7 +484,7 @@ galleryTour-magazine-desc =
     تعرض المعاينة كل غلاف بجانب مقتطفه، مثل التعليقات التوضيحية مع نصوص بدلاً من التمييزات. العناصر بلا معاينة تُعرض في صف أغلفة.
 galleryTour-card-title = عرض البطاقات
 galleryTour-card-desc =
-    تستخدم البطاقات تخطيط المقرر نفسه، مجمّعة حسب نوع العنصر حتى تتجاور القراءات المتشابهة.
+    Cards show title, creators, and notes in a reading column. Here they’re grouped by item type so similar items sit together.
 galleryTour-choose-title = اختر الافتراضي
 galleryTour-choose-desc =
     بأي تخطيط يُفتح المعرض؟ يمكنك تغيير ذلك لاحقًا في تفضيلات Zotero Syllabus أو عبر حفظ كافتراضي.
@@ -719,7 +728,7 @@ explorer-add-saved-search = Saved search…
 explorer-shelf-upcoming-deadlines = Upcoming reading deadlines
 explorer-shelf-upcoming-deadlines-desc = Due this week, or the next deadline within a month.
 explorer-shelf-pinned = Pinned
-explorer-shelf-pinned-desc = Items you’ve pinned, plus pinned collections (with next-up for syllabi).
+explorer-shelf-pinned-desc = Items and collections you’ve pinned for quick access.
 explorer-go-to-reading-schedule = Go to Reading Schedule
 explorer-go-to-my-annotations = Go to Annotation Feed
 explorer-shelf-watch-now = Watch now

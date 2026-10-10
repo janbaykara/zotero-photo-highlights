@@ -23,13 +23,15 @@ A **syllabus is one Zotero collection** that you have turned into a syllabus (or
 
 ## Collection note
 
-Each syllabus collection has a top-level note tagged `zotero-syllabus` (title `Syllabus`). The plugin treats the JSON in that note as canonical and regenerates the readable HTML around it.
+Each syllabus collection has a top-level note tagged `zotero-syllabus` (title `Syllabus document - {collection name}`). The plugin treats the JSON in that note as canonical and regenerates the readable HTML around it.
 
 The note HTML is roughly:
 
-1. Human-readable prose (collection title, course line, class headings, citations).
+1. Human-readable prose: H1 `Syllabus document - {collection name}` (Zotero’s note title), course line, class headings, citations — no done/todo checkboxes; status lives in the JSON and the Syllabus UI.
 2. A “Plugin data (do not edit)” heading.
 3. A `<pre data-zotero-syllabus="1">` block with the JSON document.
+
+Readable HTML format version is `data-readable` on the note root (`READABLE_NOTE_FORMAT_VERSION` in [`syllabusNoteHtml.ts`](../src/modules/syllabusNoteHtml.ts)); older notes are rewritten on the next format patch. Note recognition still accepts legacy titles `Syllabus` / bare collection names via the `zotero-syllabus` tag.
 
 Schema: `CollectionSyllabusDocument` in [`src/utils/schemas.ts`](../src/utils/schemas.ts) (currently **v2**). Classes are keyed by a stable `classId`. Display number is the 1-based index in `classOrder`. A leftover stored `number` is used once on ingest to place that class in that slot (class 5 stays 5). Unnumbered classes fill earlier gaps first; remaining holes become empty classes. `number` is then stripped. Assignments live under `items[itemKey]` and point at a `classId` (not at the display number). Moving a class up or down reorders `classOrder`; identities and folders stay put.
 
@@ -41,7 +43,7 @@ UI metadata is a projection of the document (`classesToNumberKeyed`): number-key
 
 ## Personal reading order
 
-Distinct from the Syllabus note: a hidden top-level collection note (title `Personal Reading Order`, tag `zotero-syllabus-personal-reading-order`) stores a flat list of item keys the user wants to read in. It is excluded from Syllabus/Gallery item lists (same pattern as the Syllabus document note). **UI surfaces** (Gallery sort + DnD, Explorer “Reading order” sort, context-menu add/remove from collection reading order, personal-order precedence on shelves/stacks) require the **Gallery** optional feature (`enableGallery`). Done-state storage still works for Syllabus checkboxes when Gallery is off.
+Distinct from the Syllabus note: a hidden top-level collection note (title `Personal reading order - {collection name}`, tag `zotero-syllabus-personal-reading-order`) stores a flat list of item keys the user wants to read in. It is excluded from Syllabus/Gallery item lists (same pattern as the Syllabus document note). **UI surfaces** (Gallery sort + DnD, Explorer “Reading order” sort, context-menu add/remove from collection reading order, personal-order precedence on shelves/stacks) require the **Gallery** optional feature (`enableGallery`). Done-state storage still works for Syllabus checkboxes when Gallery is off.
 
 Envelope (human then machine), in [`src/modules/personalReadingOrder.ts`](../src/modules/personalReadingOrder.ts):
 
@@ -152,9 +154,11 @@ Pin state is tags only (not syllabus JSON). Shelf order is a per-library pref (`
 
 ## Gallery page
 
-Display chrome is per view with “Save as default” — see [DISPLAY-PREFS.md](DISPLAY-PREFS.md). Modes: Card, Cover, Annotations, Preview (same cover+sidecar layout as Annotations, with excerpt blurbs). End-user steps: [README — Gallery](../README.md#gallery).
+Display chrome is per view with “Save as default” — see [DISPLAY-PREFS.md](DISPLAY-PREFS.md). Modes: Card, Cover, Annotations, Preview (same cover+sidecar layout as Annotations, with excerpt blurbs). An empty collection (not the managed Pinned folder) shows a reading-list empty state (`gallery-empty-title` / `gallery-empty-desc`) instead of a bare “no items” line. End-user steps: [docs — Gallery](https://janbaykara.github.io/zotero-syllabus/how-to/gallery/).
 
-**Personal Reading Order DnD** uses [`src/zotero-dnd`](../src/zotero-dnd/) (chrome-safe `@dnd-kit/abstract`). Gallery uses blue-line indicators; FLIP live-reorder is opt-in. Usage guide: [`src/zotero-dnd/README.md`](../src/zotero-dnd/README.md). Reference UI: [`PersonalOrderGallery.tsx`](../src/modules/PersonalOrderGallery.tsx).
+**Personal Reading Order DnD** uses [`src/zotero-dnd`](../src/zotero-dnd/) (chrome-safe `@dnd-kit/abstract`). Gallery uses blue-line indicators; FLIP live-reorder is opt-in. The **Unordered** zone is always shown (empty dashed dropzone when every item is ordered) so items can be delisted by drag. Usage guide: [`src/zotero-dnd/README.md`](../src/zotero-dnd/README.md). Reference UI: [`PersonalOrderGallery.tsx`](../src/modules/PersonalOrderGallery.tsx).
+
+**Home (Explorer) defaults** (`defaultExplorerShelves` in [`explorerConfig.ts`](../src/modules/explorerConfig.ts)): Pinned → Recently read → Recent annotations → Upcoming deadlines → Watch / Listen → Recently added. Users still on the previous pinned+deadlines-first shipped layout are migrated once via `coerceExplorerShelves`.
 
 ## Gallery notes
 
@@ -197,7 +201,7 @@ That works in Preact TSX (render, `title`, `placeholder`, `aria-label`) and in p
 
 Prefs XHTML uses `data-l10n-id` against `preferences.ftl`. Keep `{ $vars }` and Fluent attributes (`.label`) unchanged when translating.
 
-Do **not** localize stored library identifiers: syllabus note title `Syllabus`, personal reading-order note title `Personal Reading Order`, managed collection `Reading Schedule`, managed top-level folder `Pinned`, playground `Syllabus Tour`, tags `zotero-syllabus` / `zotero-syllabus-personal-reading-order` / `pinned` / `zotero-syllabus-pinned-intention` / `zotero-syllabus-pinned-collection` / `zotero-syllabus-gallery:{collectionKey}`, or the “Plugin data (do not edit)” note heading. Display chrome for those concepts still goes through Fluent. The product name **Zotero Syllabus** is not translated.
+Do **not** localize stored library identifiers: syllabus note title prefix `Syllabus` / `Syllabus document` (H1 `Syllabus document - {collection name}`), personal reading-order note title prefix `Personal Reading Order` / `Personal reading order` (H1 `Personal reading order - {collection name}`), managed collection `Reading Schedule`, managed top-level folder `Pinned`, playground `Syllabus Tour`, tags `zotero-syllabus` / `zotero-syllabus-personal-reading-order` / `pinned` / `zotero-syllabus-pinned-intention` / `zotero-syllabus-pinned-collection` / `zotero-syllabus-gallery:{collectionKey}`, or the “Plugin data (do not edit)” note heading. Display chrome for those concepts still goes through Fluent. The product name **Zotero Syllabus** is not translated.
 
 ## Reading-list connectors
 

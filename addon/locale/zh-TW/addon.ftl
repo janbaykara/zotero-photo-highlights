@@ -68,21 +68,21 @@ menuHelp-openReddit = Reddit
 menuHelp-openForum = Zotero Forum
 userGuide-start-title = 歡迎使用 Zotero Syllabus
 userGuide-start-desc =
-    將任意 Zotero 分類變成課程閱讀清單——按課堂組織、設定優先順序，並追蹤接下來要讀什麼。
+    Two ways to use a collection: Syllabus structures a course by class or week; Gallery is a reading list with covers and your own order — no classes required. Home, due dates, and an annotation feed sit alongside.
 userGuide-start-close = 以後再說
 userGuide-exit = 結束導覽
 optional-features-intro-title = Choose your views
 optional-features-intro-desc =
-    Pick which surfaces to show. You can change these anytime in Preferences. Syllabus view is recommended to get started.
+    Syllabus is for courses (classes, priorities, due dates). Gallery is for a personal reading list (covers and reading order) and does not need a syllabus. Turn on the surfaces you want — you can change them anytime in Preferences.
 optional-features-syllabus-title = Syllabus view
 optional-features-syllabus-desc =
-    Structure a collection by class session, drag readings into place, and edit priorities and instructions.
+    For a course: structure a collection by class or week, drag readings into place, and set priorities and instructions. Use Turn into Syllabus on the collection first.
 optional-features-gallery-title = Gallery view
 optional-features-gallery-desc =
-    Browse a collection as covers, magazine spreads, or cards — great for finding the next thing to open.
+    For a reading list — no classes needed: browse covers, previews, or cards and set your own reading order. Works on any collection, including ones that are also a syllabus.
 optional-features-explorer-title = Home view
 optional-features-explorer-desc =
-    A library home with shelves for recent items, upcoming deadlines, and more.
+    A library home with shelves for pinned items, recently read, annotations, deadlines, and more.
 optional-features-reading-schedule-title = Reading Schedule
 optional-features-reading-schedule-desc =
     A calendar tab that gathers class due dates across your syllabi so you can see what’s next.
@@ -101,6 +101,9 @@ optional-features-continue-desc =
 userGuide-collection-title = 從分類開始
 userGuide-collection-desc =
     教學大綱建立在分類上。我們將開啟一個「Syllabus Tour」練習分類，並放入幾篇範例閱讀。
+userGuide-gallery-vs-syllabus-title = Gallery vs Syllabus
+userGuide-gallery-vs-syllabus-desc =
+    Same collection, two toolbar views. Gallery browses it as a reading list (covers and your own order). Syllabus organizes it by class or week for a course — after Turn into Syllabus. You can switch anytime; this tour continues with Syllabus.
 userGuide-syllabusButton-title = 轉為教學大綱
 userGuide-syllabusButton-desc =
     在條目工具列點選「轉為教學大綱」，將此分類轉為課程大綱。本指南會自動切換過去。
@@ -124,7 +127,7 @@ userGuide-readingSchedule-light-desc =
     The Reading Schedule tab gathers class due dates across your syllabi. Next opens it from the tab bar.
 userGuide-home-title = Home view
 userGuide-home-desc =
-    At the library root, switch to Home for shelves of recent items and upcoming deadlines. Next selects your library home.
+    At the library root, switch to Home for shelves of pinned items, recently read, and upcoming deadlines. Next selects your library home.
 userGuide-subcollections-title = 選用：課堂資料夾
 userGuide-subcollections-desc =
     需要按課堂鏡像資料夾嗎？在設定中啟用「課堂子分類」。除非希望外掛管理子資料夾，否則請保持關閉。
@@ -220,12 +223,12 @@ page-drop-import-file = 拖放檔案以加入此收藏集
 further-reading-heading = 延伸閱讀
 sort-label = 排序
 further-reading-sort-aria = 排序延伸閱讀
-further-reading-add-readings-aria = 新增閱讀到延伸閱讀
+further-reading-add-readings-aria = Add items to further reading
 sort-by-title = 標題
 sort-by-creator = 建立者
 sort-by-date = 日期
 further-reading-empty-desc = 此部分中的條目尚未指派到任何課堂。
-unnumbered-add-readings-aria = 新增閱讀到無編號區段
+unnumbered-add-readings-aria = Add items to the unnumbered section
 unnumbered-add-note-aria = 新增筆記到無編號區段
 toc-empty = 暫無課堂
 placeholder-url = https://
@@ -244,8 +247,8 @@ class-move-down = 下移{ $nomenclature }
 class-delete = 刪除{ $nomenclature }
 class-insert-here = 在此新增{ $nomenclature }
 class-dropzone-hint = 將條目拖到{ $nomenclature } { $number }
-class-add-readings = 新增閱讀
-class-add-readings-aria = 將閱讀新增到{ $nomenclature } { $number }
+class-add-readings = Add items
+class-add-readings-aria = Add items to { $nomenclature } { $number }
 class-add-note = 新增筆記
 class-note-priority = 課堂筆記
 class-note-open = 開啟筆記
@@ -371,9 +374,13 @@ priority-default-optional = 選讀
 # Gallery
 gallery-pinned-header =
     Items you’ve pinned for quick access. Pin or unpin from an item’s context menu or the Reading Schedule. Collections you pin stay on Home and Reading Schedule, not in this folder.
-gallery-add-readings-aria = 新增閱讀到此收藏集
+gallery-add-readings-aria = Add items to this collection
+gallery-add-items = Add items
 gallery-empty-filtered = 沒有相符的條目。
 gallery-empty = 此分類中沒有條目。
+gallery-empty-title = Start a reading list
+gallery-empty-desc =
+    Add papers, books, or articles to this collection. Choose Reading order in the sort menu to arrange them, and optionally add a short description under the title.
 gallery-untagged = 無標籤
 gallery-untagged-desc = 此部分中的條目沒有標籤。
 gallery-uncredited = 無建立者
@@ -382,7 +389,8 @@ gallery-empty-subcollections = 此分類中沒有子分類或條目。
 gallery-unnumbered = 未編號
 gallery-unnumbered-desc = 已指派但沒有課堂編號。
 gallery-sort-auto = 自動
-gallery-sort-auto-title = 自動排序（個人閱讀清單，其次班級，再次分類）
+gallery-sort-auto-title = Automatic order (reading order when set, otherwise collection order)
+gallery-sort-auto-title-syllabus = Automatic order (reading order, then class, then collection)
 gallery-sort-az = A–Z
 gallery-sort-az-title = 按 A–Z 排序
 gallery-sort-date = 出版
@@ -392,6 +400,7 @@ gallery-sort-date-added-title = 按新增日期排序（最新優先）
 gallery-sort-personal-order = 閱讀順序
 gallery-sort-personal-order-title = 個人閱讀順序（拖曳重排）
 gallery-personal-order-unordered = 未排序
+gallery-personal-order-unordered-empty = Drag items here to remove them from your reading order
 gallery-personal-order-landing-label = Reading order
 gallery-personal-order-landing-empty = Drag items here to set your reading order
 personal-reading-order-menu-add = 新增到文集閱讀順序
@@ -417,7 +426,7 @@ gallery-group-classes-title = 按課堂分組
 gallery-layout-cover = 封面
 gallery-layout-cover-title = 封面圖
 gallery-layout-card = 卡片
-gallery-layout-card-title = 教學大綱卡片
+gallery-layout-card-title = Reading cards
 gallery-layout-annotations = 註解
 gallery-layout-annotations-title = 含全部註解的封面
 gallery-annotations-empty = 沒有註解
@@ -466,7 +475,7 @@ gallery-save-globally-title = 將此選項儲存為所有收藏的預設設定
 gallery-save-globally-active-title = 此收藏的設定與預設不同。點一下以儲存為預設。
 galleryTour-settings-title = 圖庫選項
 galleryTour-settings-desc =
-    開啟角落的選單可切換檢視、排序與分組。我們將依序介紹三種版面。
+    Gallery is your reading-list view for this collection (separate from Syllabus classes). Open the menu in the corner to switch layout, sort, and grouping — we’ll walk through the layouts.
 galleryTour-cover-title = 封面檢視
 galleryTour-cover-desc =
     封面將每筆項目顯示為封面圖——書籍、論文與網頁一目了然。
@@ -475,7 +484,7 @@ galleryTour-magazine-desc =
     預覽在封面旁顯示摘錄，版面與註記相同，只是摘錄而非螢光標記。沒有預覽的條目排成封面列。
 galleryTour-card-title = 卡片檢視
 galleryTour-card-desc =
-    卡片使用教學大綱項目版面，並依項目類型分組，讓同類讀物排在一起。
+    Cards show title, creators, and notes in a reading column. Here they’re grouped by item type so similar items sit together.
 galleryTour-choose-title = 選擇預設版面
 galleryTour-choose-desc =
     圖庫應以哪種版面開啟？之後可在 Zotero Syllabus 偏好設定中更改，或使用「儲存為預設」。
@@ -719,7 +728,7 @@ explorer-add-saved-search = Saved search…
 explorer-shelf-upcoming-deadlines = Upcoming reading deadlines
 explorer-shelf-upcoming-deadlines-desc = Due this week, or the next deadline within a month.
 explorer-shelf-pinned = Pinned
-explorer-shelf-pinned-desc = Items you’ve pinned, plus pinned collections (with next-up for syllabi).
+explorer-shelf-pinned-desc = Items and collections you’ve pinned for quick access.
 explorer-go-to-reading-schedule = Go to Reading Schedule
 explorer-go-to-my-annotations = Go to Annotation Feed
 explorer-shelf-watch-now = Watch now

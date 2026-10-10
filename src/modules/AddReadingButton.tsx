@@ -5,6 +5,8 @@ import { getString } from "../utils/locale";
 
 type AddReadingButtonProps = {
   onClick: () => void;
+  /** Visible button label. Defaults to “Add items”. */
+  label?: string;
   title?: string;
   ariaLabel?: string;
   /** When true, only show on parent `group/class` hover / focus (class footers). */
@@ -13,16 +15,17 @@ type AddReadingButtonProps = {
 };
 
 /**
- * Centered “Add readings” control — same chrome as the class-group footer.
+ * Centered “Add items” control — same chrome as the class-group footer.
  */
 export function AddReadingButton({
   onClick,
+  label,
   title,
   ariaLabel,
   hoverReveal = false,
   className,
 }: AddReadingButtonProps) {
-  const label = getString("class-add-readings");
+  const text = label || getString("class-add-readings");
   return (
     <div
       className={twMerge(
@@ -36,14 +39,14 @@ export function AddReadingButton({
         type="button"
         className="inline-flex items-center justify-center gap-1 cursor-pointer bg-transparent border-0 p-0 text-xs text-secondary hover:text-primary"
         onClick={onClick}
-        title={title || label}
-        aria-label={ariaLabel || title || label}
+        title={title || text}
+        aria-label={ariaLabel || title || text}
       >
         <span
           className="syllabus-class-add-icon syllabus-class-add-icon-item"
           aria-hidden="true"
         />
-        {label}
+        {text}
       </button>
     </div>
   );

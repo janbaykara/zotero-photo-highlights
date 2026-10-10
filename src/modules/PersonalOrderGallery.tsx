@@ -222,12 +222,14 @@ function RestZone({
   renderItem: (item: Zotero.Item, index: number) => ComponentChildren;
   draggingKeys: Set<string>;
 }) {
+  const empty = keys.length === 0;
   // Droppable on the list body only — not the whole section — so the
   // unorder highlight doesn't paint over the ordered landing above.
+  // Higher priority when empty so ordered tiles don't steal the hit target.
   const { ref } = useDroppable({
     id: "rest",
     accept: (source) => sourceGroupOf(source as never) === "ordered",
-    collisionPriority: 1,
+    collisionPriority: empty ? 50 : 1,
   });
 
   return (
@@ -245,26 +247,38 @@ function RestZone({
       <div
         ref={ref}
         className={twMerge(
-          "syllabus-personal-order-section syllabus-personal-order-rest-body",
-          className,
+          "syllabus-personal-order-rest-body",
+          empty
+            ? "is-empty"
+            : twMerge("syllabus-personal-order-section", className),
         )}
+        data-personal-order-zone="rest"
       >
-        {keys.map((key, index) => {
-          const item = itemsByKey.get(key);
-          if (!item) {
-            return null;
-          }
-          return (
-            <SortablePersonalTile
-              key={item.key}
-              item={item}
-              index={index}
-              zone="rest"
-              renderItem={renderItem}
-              isMultiDragging={draggingKeys.has(item.key)}
-            />
-          );
-        })}
+        {empty ? (
+          <div
+            className="syllabus-personal-order-landing-empty text-secondary text-base"
+            role="status"
+          >
+            {getString("gallery-personal-order-unordered-empty")}
+          </div>
+        ) : (
+          keys.map((key, index) => {
+            const item = itemsByKey.get(key);
+            if (!item) {
+              return null;
+            }
+            return (
+              <SortablePersonalTile
+                key={item.key}
+                item={item}
+                index={index}
+                zone="rest"
+                renderItem={renderItem}
+                isMultiDragging={draggingKeys.has(item.key)}
+              />
+            );
+          })
+        )}
       </div>
     </section>
   );
@@ -483,15 +497,15 @@ export function PersonalOrderGallery({
           renderItem={renderItem}
           draggingKeys={draggingKeys}
         />
-        {containers.rest.length > 0 ? (
-          <RestZone
-            keys={containers.rest}
-            itemsByKey={itemsByKey}
-            className={className}
-            renderItem={renderItem}
-            draggingKeys={draggingKeys}
-          />
-        ) : null}
+        {/* Always show Unordered — empty dropzone lets you delist when every
+            item is currently in reading order. */}
+        <RestZone
+          keys={containers.rest}
+          itemsByKey={itemsByKey}
+          className={className}
+          renderItem={renderItem}
+          draggingKeys={draggingKeys}
+        />
       </div>
     </DndProvider>
   );

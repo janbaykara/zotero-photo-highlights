@@ -4,11 +4,10 @@ import {
   type CollectionSyllabusDocument,
 } from "../src/utils/schemas";
 import { classSubcollectionName } from "../src/modules/classSubcollections";
+import { syllabusNoteDocumentHeading } from "../src/modules/syllabusNote";
 import {
   PLUGIN_JSON_HEADING,
   READABLE_NOTE_FORMAT_VERSION,
-  READING_DONE_MARK,
-  READING_TODO_MARK,
   getReadableNoteFormatVersion,
   isUnsupportedFutureNote,
   looksLikeSyllabusDocumentPayload,
@@ -77,12 +76,15 @@ describe("syllabus note readable HTML", function () {
       getReadableNoteFormatVersion(html),
       READABLE_NOTE_FORMAT_VERSION,
     );
+    assert.include(html, `<h1>${syllabusNoteDocumentHeading(null)}</h1>`);
     assert.include(html, `<h3>${heading}</h3>`);
     assert.notInclude(html, " - done</p>");
     assert.include(html, "<strong>Essential</strong>");
     assert.include(html, "<strong>Optional</strong>");
-    assert.include(html, `${READING_DONE_MARK} First Book — Read pp. 1-20`);
-    assert.include(html, `${READING_TODO_MARK} Second Article`);
+    assert.include(html, "First Book — Read pp. 1-20");
+    assert.include(html, "Second Article");
+    assert.notInclude(html, "☐");
+    assert.notInclude(html, "✅ First Book");
     assert.include(html, `href="https://doi.org/10.1234/foo"`);
     assert.include(html, ">DOI</a>");
     assert.include(html, "You can stop reading here");
@@ -90,6 +92,13 @@ describe("syllabus note readable HTML", function () {
     assert.include(html, "EDU101 - Test University");
     assert.include(html, "Start here.");
     assert.include(html, `href="https://example.edu/syllabus"`);
+  });
+
+  it("uses Syllabus document - collection name as the note H1", async function () {
+    const document = sampleDocument();
+    const collection = { name: "My Course" } as Zotero.Collection;
+    const html = await serializeSyllabusNote(document, collection);
+    assert.include(html, "<h1>Syllabus document - My Course</h1>");
   });
 
   it("round-trips the JSON payload after the readable rewrite", async function () {

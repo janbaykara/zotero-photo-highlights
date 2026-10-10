@@ -3,7 +3,7 @@ title: Getting started
 description: Install Zotero Syllabus and open your first syllabus view.
 ---
 
-Zotero Syllabus turns your collections into course reading lists: order items by class, browse covers in Gallery, keep a Home of what to open next, follow due dates on Reading Schedule, and review highlights in Annotation Feed.
+Zotero Syllabus gives two ways to use a collection: **Syllabus** structures a course by class or week; **Gallery** is a personal reading list with covers and your own order (no classes required). Home, Reading Schedule, and Annotation Feed sit alongside.
 
 ## Install
 
@@ -23,13 +23,13 @@ For best results, use [Zotero 8, 9, or 10](https://www.zotero.org/download/). Zo
 Open **Preferences → Zotero Syllabus → Views** and turn each surface on or off:
 
 
-| Surface              | Where it appears                                         |
-| -------------------- | -------------------------------------------------------- |
-| **Syllabus**         | On a collection — toolbar **Table / Gallery / Syllabus** |
-| **Gallery**          | Same collection toolbar                                  |
-| **Home**             | Library root — **Table / Home**                          |
-| **Reading Schedule** | Its own tab (toolbar or from Home)                       |
-| **Annotation Feed**  | Its own tab (toolbar or from Home)                       |
+| Surface              | What it’s for                                                                 | Where it appears                         |
+| -------------------- | ----------------------------------------------------------------------------- | ---------------------------------------- |
+| **Syllabus**         | Course structure (classes, priorities, due dates). Needs **Turn into Syllabus**. | Collection toolbar **Table / Gallery / Syllabus** |
+| **Gallery**          | Reading list (covers, reading order). No classes required.                    | Same collection toolbar                  |
+| **Home**             | Shelves for pinned, recently read, annotations, deadlines, and more           | Library root — **Table / Home**          |
+| **Reading Schedule** | Class due dates across syllabi                                                | Its own tab (toolbar or from Home)       |
+| **Annotation Feed**  | Highlights and notes across sources                                           | Its own tab (toolbar or from Home)       |
 
 
 

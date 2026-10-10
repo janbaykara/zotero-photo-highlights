@@ -15,8 +15,10 @@ import { createReentrantSerialQueue } from "../utils/serialQueue";
 import { getAllCollections } from "../utils/zotero";
 import { PLUGIN_JSON_HEADING, PLUGIN_REPO_URL } from "./syllabusNoteHtml";
 
-/** Stored identifier — do not localize. */
+/** Legacy note title; recognition also accepts titles that start with this. */
 export const PERSONAL_READING_ORDER_NOTE_TITLE = "Personal Reading Order";
+/** Prefix for the human-readable note H1 (Zotero’s note title). */
+export const PERSONAL_READING_ORDER_DOCUMENT_PREFIX = "Personal reading order";
 /** Stored identifier — do not localize. */
 export const PERSONAL_READING_ORDER_NOTE_TAG =
   "zotero-syllabus-personal-reading-order";
@@ -25,6 +27,25 @@ export const PERSONAL_READING_ORDER_PRE_ATTR =
   "data-zotero-syllabus-personal-reading-order";
 
 export const PERSONAL_READING_ORDER_VERSION = 1 as const;
+
+/** H1 / note title: `Personal reading order - {collection name}`. */
+export function personalReadingOrderDocumentHeading(
+  collectionName?: string | null,
+): string {
+  const name = (collectionName || "").trim();
+  return name
+    ? `${PERSONAL_READING_ORDER_DOCUMENT_PREFIX} - ${name}`
+    : PERSONAL_READING_ORDER_DOCUMENT_PREFIX;
+}
+
+function titleLooksLikePersonalReadingOrderNote(title: string): boolean {
+  return (
+    title === PERSONAL_READING_ORDER_NOTE_TITLE ||
+    title.startsWith(PERSONAL_READING_ORDER_NOTE_TITLE) ||
+    title === PERSONAL_READING_ORDER_DOCUMENT_PREFIX ||
+    title.startsWith(PERSONAL_READING_ORDER_DOCUMENT_PREFIX)
+  );
+}
 
 export const PersonalReadingOrderDocumentSchema = z.object({
   version: z.literal(PERSONAL_READING_ORDER_VERSION).default(1),
@@ -187,10 +208,7 @@ export function isPersonalReadingOrderNote(
     }
     try {
       const title = item.getNoteTitle() || "";
-      if (
-        title === PERSONAL_READING_ORDER_NOTE_TITLE ||
-        title.startsWith(PERSONAL_READING_ORDER_NOTE_TITLE)
-      ) {
+      if (titleLooksLikePersonalReadingOrderNote(title)) {
         return true;
       }
     } catch {
@@ -348,7 +366,7 @@ export function serializePersonalReadingOrderNote(
   const json = JSON.stringify(payload, null, 2);
   const repoHref = escapeHtml(PLUGIN_REPO_URL);
   const body = [
-    `<h1>${escapeHtml(PERSONAL_READING_ORDER_NOTE_TITLE)}</h1>`,
+    `<h1>${escapeHtml(personalReadingOrderDocumentHeading(collection?.name))}</h1>`,
     description ? `<p>${escapeHtml(description)}</p>` : "",
     list,
     doneOnlyBlock,
@@ -1101,6 +1119,33 @@ function handleNoteChange(item: Zotero.Item): void {
   }
 }
 
+async function rewriteStalePersonalReadingOrderNoteTitles(): Promise<void> {
+  for (const collection of getAllCollections()) {
+    try {
+      const note = findPersonalReadingOrderNoteUncached(collection);
+      if (!note) {
+        continue;
+      }
+      const expected = personalReadingOrderDocumentHeading(collection.name);
+      let title = "";
+      try {
+        title = note.getNoteTitle() || "";
+      } catch {
+        title = "";
+      }
+      if (title === expected) {
+        continue;
+      }
+      await mutatePersonalReadingOrderDocument(
+        collection,
+        (document) => document,
+      );
+    } catch (error) {
+      ztoolkit.log("Error rewriting personal reading order note title:", error);
+    }
+  }
+}
+
 async function rebuildOrderIndex(): Promise<void> {
   const libraries = Zotero.Libraries.getAll();
   await Promise.all(
@@ -1133,6 +1178,7 @@ async function rebuildOrderIndex(): Promise<void> {
     }
   }
   bumpGeneration();
+  await rewriteStalePersonalReadingOrderNoteTitles();
 }
 
 export function initializePersonalReadingOrder(): void {

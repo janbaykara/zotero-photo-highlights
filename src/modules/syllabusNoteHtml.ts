@@ -12,16 +12,18 @@ import {
 import { generateBibliographicReference } from "../utils/cite";
 import { getItemTitle } from "../utils/items";
 import { classSubcollectionName } from "./classSubcollections";
-import { SYLLABUS_NOTE_PRE_ATTR, SYLLABUS_NOTE_TITLE } from "./syllabusNote";
+import {
+  SYLLABUS_NOTE_PRE_ATTR,
+  SYLLABUS_NOTE_TITLE,
+  syllabusNoteDocumentHeading,
+} from "./syllabusNote";
 import { proseToHtml } from "../utils/prose";
 
 export const PLUGIN_JSON_HEADING = "Plugin data (do not edit)";
 export const PLUGIN_REPO_URL = "https://github.com/janbaykara/zotero-syllabus";
 /** Human-readable envelope. Independent of document.version. */
-export const READABLE_NOTE_FORMAT_VERSION = 2;
+export const READABLE_NOTE_FORMAT_VERSION = 4;
 export const READABLE_NOTE_ATTR = "data-readable";
-export const READING_DONE_MARK = "✅";
-export const READING_TODO_MARK = "☐";
 
 function escapeHtml(text: string): string {
   return text
@@ -331,13 +333,11 @@ function readingLinks(
 }
 
 function formatReadingHtml(
-  done: boolean,
   citation: string,
   instruction: string,
   links: { href: string; label: string }[],
 ): string {
-  const mark = done ? READING_DONE_MARK : READING_TODO_MARK;
-  const parts = [`${mark} ${escapeHtml(citation)}`];
+  const parts = [escapeHtml(citation)];
   const instr = instruction.replace(/\s+/g, " ").trim();
   if (instr) {
     parts.push(escapeHtml(instr));
@@ -382,7 +382,6 @@ async function readingHtmlLines(
         style,
       );
       return formatReadingHtml(
-        row.assignment.status === "done",
         citation,
         (row.assignment.classInstruction || "").trim(),
         readingLinks(item, row.itemKey, document),
@@ -523,7 +522,7 @@ async function renderReadableNoteBody(
     : "";
 
   return [
-    heading(1, collection?.name || SYLLABUS_NOTE_TITLE),
+    heading(1, syllabusNoteDocumentHeading(collection?.name)),
     paragraph(courseByline(document.courseCode, document.institution)),
     proseToHtml(document.description),
     linksBlock(document.links),

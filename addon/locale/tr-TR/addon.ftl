@@ -68,21 +68,21 @@ menuHelp-openReddit = Reddit
 menuHelp-openForum = Zotero Forum
 userGuide-start-title = Zotero Syllabus’a hoş geldiniz
 userGuide-start-desc =
-    Herhangi bir Zotero koleksiyonunu ders okuma listesine dönüştürün — derslere göre düzenleyin, öncelikleri belirleyin ve sıradaki okumayı izleyin.
+    Two ways to use a collection: Syllabus structures a course by class or week; Gallery is a reading list with covers and your own order — no classes required. Home, due dates, and an annotation feed sit alongside.
 userGuide-start-close = Daha sonra hatırlat
 userGuide-exit = Turu bitir
 optional-features-intro-title = Choose your views
 optional-features-intro-desc =
-    Pick which surfaces to show. You can change these anytime in Preferences. Syllabus view is recommended to get started.
+    Syllabus is for courses (classes, priorities, due dates). Gallery is for a personal reading list (covers and reading order) and does not need a syllabus. Turn on the surfaces you want — you can change them anytime in Preferences.
 optional-features-syllabus-title = Syllabus view
 optional-features-syllabus-desc =
-    Structure a collection by class session, drag readings into place, and edit priorities and instructions.
+    For a course: structure a collection by class or week, drag readings into place, and set priorities and instructions. Use Turn into Syllabus on the collection first.
 optional-features-gallery-title = Gallery view
 optional-features-gallery-desc =
-    Browse a collection as covers, magazine spreads, or cards — great for finding the next thing to open.
+    For a reading list — no classes needed: browse covers, previews, or cards and set your own reading order. Works on any collection, including ones that are also a syllabus.
 optional-features-explorer-title = Home view
 optional-features-explorer-desc =
-    A library home with shelves for recent items, upcoming deadlines, and more.
+    A library home with shelves for pinned items, recently read, annotations, deadlines, and more.
 optional-features-reading-schedule-title = Reading Schedule
 optional-features-reading-schedule-desc =
     A calendar tab that gathers class due dates across your syllabi so you can see what’s next.
@@ -101,6 +101,9 @@ optional-features-continue-desc =
 userGuide-collection-title = Bir koleksiyondan başlayın
 userGuide-collection-desc =
     İzlenceler koleksiyonlarda yaşar. Birkaç örnek okuma içeren bir “İzlence Turu” deneme koleksiyonu açacağız.
+userGuide-gallery-vs-syllabus-title = Gallery vs Syllabus
+userGuide-gallery-vs-syllabus-desc =
+    Same collection, two toolbar views. Gallery browses it as a reading list (covers and your own order). Syllabus organizes it by class or week for a course — after Turn into Syllabus. You can switch anytime; this tour continues with Syllabus.
 userGuide-syllabusButton-title = İzlenceye dönüştürün
 userGuide-syllabusButton-desc =
     Bu koleksiyonu ders taslağına dönüştürmek için öğe araç çubuğundaki İzlenceye dönüştür’e tıklayın. Tur sizi oraya geçirecektir.
@@ -124,7 +127,7 @@ userGuide-readingSchedule-light-desc =
     The Reading Schedule tab gathers class due dates across your syllabi. Next opens it from the tab bar.
 userGuide-home-title = Home view
 userGuide-home-desc =
-    At the library root, switch to Home for shelves of recent items and upcoming deadlines. Next selects your library home.
+    At the library root, switch to Home for shelves of pinned items, recently read, and upcoming deadlines. Next selects your library home.
 userGuide-subcollections-title = İsteğe bağlı: ders klasörleri
 userGuide-subcollections-desc =
     Her ders için klasör yansıması ister misiniz? Ayarlar’da Ders alt koleksiyonlarını etkinleştirin. Eklentinin alt klasörleri yönetmesini istemiyorsanız kapalı bırakın.
@@ -220,12 +223,12 @@ page-drop-import-file = Bu koleksiyona eklemek için dosyaları bırakın
 further-reading-heading = Ek okumalar
 sort-label = Sırala
 further-reading-sort-aria = Ek okumaları sırala
-further-reading-add-readings-aria = İlave okumaya okuma ekle
+further-reading-add-readings-aria = Add items to further reading
 sort-by-title = Başlık
 sort-by-creator = Oluşturan
 sort-by-date = Tarih
 further-reading-empty-desc = Bu bölümdeki öğeler hiçbir derse atanmamıştır.
-unnumbered-add-readings-aria = Numarasız bölüme okuma ekle
+unnumbered-add-readings-aria = Add items to the unnumbered section
 unnumbered-add-note-aria = Numarasız bölüme not ekle
 toc-empty = Kullanılabilir ders yok
 placeholder-url = https://
@@ -244,8 +247,8 @@ class-move-down = { $nomenclature } ögesini aşağı taşı
 class-delete = { $nomenclature } ögesini sil
 class-insert-here = Buraya { $nomenclature } ekle
 class-dropzone-hint = Öğeleri { $nomenclature } { $number } üzerine sürükleyin
-class-add-readings = Okuma ekle
-class-add-readings-aria = { $nomenclature } { $number } öğesine okuma ekle
+class-add-readings = Add items
+class-add-readings-aria = Add items to { $nomenclature } { $number }
 class-add-note = Not ekle
 class-note-priority = Ders notu
 class-note-open = Notu aç
@@ -371,9 +374,13 @@ priority-default-optional = İsteğe bağlı
 # Gallery
 gallery-pinned-header =
     Items you’ve pinned for quick access. Pin or unpin from an item’s context menu or the Reading Schedule. Collections you pin stay on Home and Reading Schedule, not in this folder.
-gallery-add-readings-aria = Bu koleksiyona okuma ekle
+gallery-add-readings-aria = Add items to this collection
+gallery-add-items = Add items
 gallery-empty-filtered = Eşleşen öğe yok.
 gallery-empty = Bu koleksiyonda öğe yok.
+gallery-empty-title = Start a reading list
+gallery-empty-desc =
+    Add papers, books, or articles to this collection. Choose Reading order in the sort menu to arrange them, and optionally add a short description under the title.
 gallery-untagged = Etiketsiz
 gallery-untagged-desc = Bu bölümdeki öğelerin etiketi yoktur.
 gallery-uncredited = Oluşturanı yok
@@ -382,7 +389,8 @@ gallery-empty-subcollections = Bu koleksiyonda alt koleksiyon veya öğe yok.
 gallery-unnumbered = Numarasız
 gallery-unnumbered-desc = Ders numarası olmadan atanmış.
 gallery-sort-auto = Otomatik
-gallery-sort-auto-title = Otomatik sıra (kişisel okuma listesi, sonra ders, sonra koleksiyon)
+gallery-sort-auto-title = Automatic order (reading order when set, otherwise collection order)
+gallery-sort-auto-title-syllabus = Automatic order (reading order, then class, then collection)
 gallery-sort-az = A–Z
 gallery-sort-az-title = A–Z sırala
 gallery-sort-date = Yayımlanma
@@ -392,6 +400,7 @@ gallery-sort-date-added-title = Eklenme tarihine göre sırala (yeniden eskiye)
 gallery-sort-personal-order = Okuma sırası
 gallery-sort-personal-order-title = Kişisel okuma sırası (yeniden düzenlemek için sürükleyin)
 gallery-personal-order-unordered = Sırasız
+gallery-personal-order-unordered-empty = Drag items here to remove them from your reading order
 gallery-personal-order-landing-label = Reading order
 gallery-personal-order-landing-empty = Drag items here to set your reading order
 personal-reading-order-menu-add = Koleksiyon okuma sırasına ekle
@@ -417,7 +426,7 @@ gallery-group-classes-title = Derslere göre grupla
 gallery-layout-cover = Kapak
 gallery-layout-cover-title = Kapak görseli
 gallery-layout-card = Kart
-gallery-layout-card-title = İzlence kartları
+gallery-layout-card-title = Reading cards
 gallery-layout-annotations = Notlar
 gallery-layout-annotations-title = Tüm notlarla kapaklar
 gallery-annotations-empty = Not yok
@@ -466,7 +475,7 @@ gallery-save-globally-title = Bu seçeneği tüm koleksiyonlar için varsayılan
 gallery-save-globally-active-title = Bu koleksiyonun ayarı varsayılandan farklı. Varsayılan olarak kaydetmek için tıklayın.
 galleryTour-settings-title = Galeri seçenekleri
 galleryTour-settings-desc =
-    Görünümü, sıralamayı ve gruplamayı değiştirmek için köşedeki menüyü açın. Üç yerleşimi sırayla göstereceğiz.
+    Gallery is your reading-list view for this collection (separate from Syllabus classes). Open the menu in the corner to switch layout, sort, and grouping — we’ll walk through the layouts.
 galleryTour-cover-title = Kapak görünümü
 galleryTour-cover-desc =
     Kapak her öğeyi kapak görseli olarak gösterir — kitaplar, makaleler ve web sayfaları bir bakışta.
@@ -475,7 +484,7 @@ galleryTour-magazine-desc =
     Önizleme, her kapağı alıntısının yanında gösterir — açıklamalar gibi ancak vurgu yerine özet. Önizlemesi olmayan öğeler bir kapak satırında durur.
 galleryTour-card-title = Kart görünümü
 galleryTour-card-desc =
-    Kartlar aynı müfredat yerleşimini kullanır, öğe türüne göre gruplanır böylece benzer okumalar bir arada durur.
+    Cards show title, creators, and notes in a reading column. Here they’re grouped by item type so similar items sit together.
 galleryTour-choose-title = Varsayılanı seçin
 galleryTour-choose-desc =
     Galeri hangi yerleşimle açılsın? Bunu daha sonra Zotero Syllabus tercihlerinden veya Varsayılan olarak kaydet ile değiştirebilirsiniz.
@@ -719,7 +728,7 @@ explorer-add-saved-search = Saved search…
 explorer-shelf-upcoming-deadlines = Upcoming reading deadlines
 explorer-shelf-upcoming-deadlines-desc = Due this week, or the next deadline within a month.
 explorer-shelf-pinned = Pinned
-explorer-shelf-pinned-desc = Items you’ve pinned, plus pinned collections (with next-up for syllabi).
+explorer-shelf-pinned-desc = Items and collections you’ve pinned for quick access.
 explorer-go-to-reading-schedule = Go to Reading Schedule
 explorer-go-to-my-annotations = Go to Annotation Feed
 explorer-shelf-watch-now = Watch now

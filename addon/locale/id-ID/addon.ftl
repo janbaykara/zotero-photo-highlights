@@ -68,21 +68,21 @@ menuHelp-openReddit = Reddit
 menuHelp-openForum = Zotero Forum
 userGuide-start-title = Selamat datang di Zotero Syllabus
 userGuide-start-desc =
-    Ubah koleksi Zotero mana pun menjadi daftar bacaan mata kuliah — susun menurut kelas, tetapkan prioritas, dan lacak bacaan berikutnya.
+    Two ways to use a collection: Syllabus structures a course by class or week; Gallery is a reading list with covers and your own order — no classes required. Home, due dates, and an annotation feed sit alongside.
 userGuide-start-close = Ingatkan nanti
 userGuide-exit = Keluar dari tur
 optional-features-intro-title = Choose your views
 optional-features-intro-desc =
-    Pick which surfaces to show. You can change these anytime in Preferences. Syllabus view is recommended to get started.
+    Syllabus is for courses (classes, priorities, due dates). Gallery is for a personal reading list (covers and reading order) and does not need a syllabus. Turn on the surfaces you want — you can change them anytime in Preferences.
 optional-features-syllabus-title = Syllabus view
 optional-features-syllabus-desc =
-    Structure a collection by class session, drag readings into place, and edit priorities and instructions.
+    For a course: structure a collection by class or week, drag readings into place, and set priorities and instructions. Use Turn into Syllabus on the collection first.
 optional-features-gallery-title = Gallery view
 optional-features-gallery-desc =
-    Browse a collection as covers, magazine spreads, or cards — great for finding the next thing to open.
+    For a reading list — no classes needed: browse covers, previews, or cards and set your own reading order. Works on any collection, including ones that are also a syllabus.
 optional-features-explorer-title = Home view
 optional-features-explorer-desc =
-    A library home with shelves for recent items, upcoming deadlines, and more.
+    A library home with shelves for pinned items, recently read, annotations, deadlines, and more.
 optional-features-reading-schedule-title = Reading Schedule
 optional-features-reading-schedule-desc =
     A calendar tab that gathers class due dates across your syllabi so you can see what’s next.
@@ -101,6 +101,9 @@ optional-features-continue-desc =
 userGuide-collection-title = Mulai dari sebuah koleksi
 userGuide-collection-desc =
     Silabus melekat pada koleksi. Kami akan membuka koleksi latihan “Tur Silabus” dengan beberapa bacaan contoh.
+userGuide-gallery-vs-syllabus-title = Gallery vs Syllabus
+userGuide-gallery-vs-syllabus-desc =
+    Same collection, two toolbar views. Gallery browses it as a reading list (covers and your own order). Syllabus organizes it by class or week for a course — after Turn into Syllabus. You can switch anytime; this tour continues with Syllabus.
 userGuide-syllabusButton-title = Jadikan silabus
 userGuide-syllabusButton-desc =
     Klik Jadikan silabus pada bilah alat item untuk menjadikan koleksi ini sebagai kerangka mata kuliah. Tur akan berpindah ke sana untuk Anda.
@@ -124,7 +127,7 @@ userGuide-readingSchedule-light-desc =
     The Reading Schedule tab gathers class due dates across your syllabi. Next opens it from the tab bar.
 userGuide-home-title = Home view
 userGuide-home-desc =
-    At the library root, switch to Home for shelves of recent items and upcoming deadlines. Next selects your library home.
+    At the library root, switch to Home for shelves of pinned items, recently read, and upcoming deadlines. Next selects your library home.
 userGuide-subcollections-title = Opsional: folder kelas
 userGuide-subcollections-desc =
     Ingin cermin folder per kelas? Aktifkan Subkoleksi kelas di Pengaturan. Biarkan nonaktif kecuali Anda ingin pengaya mengelola folder turunan.
@@ -220,12 +223,12 @@ page-drop-import-file = Letakkan berkas untuk menambahkannya ke koleksi ini
 further-reading-heading = Bacaan lanjutan
 sort-label = Urutkan
 further-reading-sort-aria = Urutkan bacaan lanjutan
-further-reading-add-readings-aria = Tambah bacaan ke bacaan lanjutan
+further-reading-add-readings-aria = Add items to further reading
 sort-by-title = Judul
 sort-by-creator = Pencipta
 sort-by-date = Tanggal
 further-reading-empty-desc = Item di bagian ini belum ditetapkan ke kelas mana pun.
-unnumbered-add-readings-aria = Tambah bacaan ke bagian tanpa nomor
+unnumbered-add-readings-aria = Add items to the unnumbered section
 unnumbered-add-note-aria = Tambah catatan ke bagian tanpa nomor
 toc-empty = Tidak ada kelas tersedia
 placeholder-url = https://
@@ -244,8 +247,8 @@ class-move-down = Pindahkan { $nomenclature } ke bawah
 class-delete = Hapus { $nomenclature }
 class-insert-here = Tambah { $nomenclature } di sini
 class-dropzone-hint = Seret item ke { $nomenclature } { $number }
-class-add-readings = Tambah bacaan
-class-add-readings-aria = Tambah bacaan ke { $nomenclature } { $number }
+class-add-readings = Add items
+class-add-readings-aria = Add items to { $nomenclature } { $number }
 class-add-note = Tambah catatan
 class-note-priority = Catatan kelas
 class-note-open = Buka catatan
@@ -371,9 +374,13 @@ priority-default-optional = Opsional
 # Gallery
 gallery-pinned-header =
     Items you’ve pinned for quick access. Pin or unpin from an item’s context menu or the Reading Schedule. Collections you pin stay on Home and Reading Schedule, not in this folder.
-gallery-add-readings-aria = Tambah bacaan ke koleksi ini
+gallery-add-readings-aria = Add items to this collection
+gallery-add-items = Add items
 gallery-empty-filtered = Tidak ada item yang cocok.
 gallery-empty = Tidak ada item dalam koleksi ini.
+gallery-empty-title = Start a reading list
+gallery-empty-desc =
+    Add papers, books, or articles to this collection. Choose Reading order in the sort menu to arrange them, and optionally add a short description under the title.
 gallery-untagged = Tanpa tag
 gallery-untagged-desc = Item di bagian ini tidak memiliki tag.
 gallery-uncredited = Tanpa pencipta
@@ -382,7 +389,8 @@ gallery-empty-subcollections = Tidak ada subkoleksi atau item dalam koleksi ini.
 gallery-unnumbered = Tanpa nomor
 gallery-unnumbered-desc = Ditetapkan tanpa nomor kelas.
 gallery-sort-auto = Otomatis
-gallery-sort-auto-title = Urutan otomatis (daftar bacaan pribadi, lalu kelas, lalu koleksi)
+gallery-sort-auto-title = Automatic order (reading order when set, otherwise collection order)
+gallery-sort-auto-title-syllabus = Automatic order (reading order, then class, then collection)
 gallery-sort-az = A–Z
 gallery-sort-az-title = Urutkan A–Z
 gallery-sort-date = Diterbitkan
@@ -392,6 +400,7 @@ gallery-sort-date-added-title = Urutkan menurut tanggal ditambahkan (terbaru dul
 gallery-sort-personal-order = Urutan baca
 gallery-sort-personal-order-title = Urutan baca pribadi (seret untuk menyusun ulang)
 gallery-personal-order-unordered = Belum diurutkan
+gallery-personal-order-unordered-empty = Drag items here to remove them from your reading order
 gallery-personal-order-landing-label = Reading order
 gallery-personal-order-landing-empty = Drag items here to set your reading order
 personal-reading-order-menu-add = Tambahkan ke urutan baca koleksi
@@ -417,7 +426,7 @@ gallery-group-classes-title = Kelompokkan menurut kelas
 gallery-layout-cover = Sampul
 gallery-layout-cover-title = Gambar sampul
 gallery-layout-card = Kartu
-gallery-layout-card-title = Kartu silabus
+gallery-layout-card-title = Reading cards
 gallery-layout-annotations = Anotasi
 gallery-layout-annotations-title = Sampul dengan semua anotasi
 gallery-annotations-empty = Tidak ada anotasi
@@ -466,7 +475,7 @@ gallery-save-globally-title = Simpan opsi ini sebagai default untuk semua koleks
 gallery-save-globally-active-title = Pengaturan koleksi ini berbeda dari default. Klik untuk menyimpannya sebagai default.
 galleryTour-settings-title = Opsi galeri
 galleryTour-settings-desc =
-    Buka menu di sudut untuk mengganti tampilan, urutan, dan pengelompokan. Kami akan menelusuri ketiga tata letak.
+    Gallery is your reading-list view for this collection (separate from Syllabus classes). Open the menu in the corner to switch layout, sort, and grouping — we’ll walk through the layouts.
 galleryTour-cover-title = Tampilan sampul
 galleryTour-cover-desc =
     Sampul menampilkan setiap item sebagai gambar — buku, artikel, dan halaman web sekilas.
@@ -475,7 +484,7 @@ galleryTour-magazine-desc =
     Pratinjau menampilkan setiap sampul di samping kutipannya, seperti Anotasi dengan teks alih-alih sorotan. Item tanpa pratinjau berada dalam baris sampul.
 galleryTour-card-title = Tampilan kartu
 galleryTour-card-desc =
-    Kartu memakai tata letak silabus yang sama, dikelompokkan menurut jenis item agar bacaan serupa berkumpul.
+    Cards show title, creators, and notes in a reading column. Here they’re grouped by item type so similar items sit together.
 galleryTour-choose-title = Pilih default
 galleryTour-choose-desc =
     Tata letak mana yang dipakai Galeri saat dibuka? Anda dapat mengubahnya nanti di preferensi Zotero Syllabus atau dengan Simpan sebagai default.
@@ -719,7 +728,7 @@ explorer-add-saved-search = Saved search…
 explorer-shelf-upcoming-deadlines = Upcoming reading deadlines
 explorer-shelf-upcoming-deadlines-desc = Due this week, or the next deadline within a month.
 explorer-shelf-pinned = Pinned
-explorer-shelf-pinned-desc = Items you’ve pinned, plus pinned collections (with next-up for syllabi).
+explorer-shelf-pinned-desc = Items and collections you’ve pinned for quick access.
 explorer-go-to-reading-schedule = Go to Reading Schedule
 explorer-go-to-my-annotations = Go to Annotation Feed
 explorer-shelf-watch-now = Watch now

@@ -10,13 +10,14 @@ At the **library root**, switch to **Home** for shelves of what to open next.
 ## Default shelves
 
 - **[Pinned](/zotero-syllabus/how-to/pinning/)**
+- **Recently read**
+- **Recent annotations**
 - **Upcoming reading deadlines**
 - **Watch now**
 - **Listen now**
-- **Recently read**
 - **Recently added**
 
-You can also add **Recent in feed** and **Recent annotations**, plus any collection or saved search.
+You can also add **Recent in feed**, plus any collection or saved search. Reorder or hide shelves anytime from **Configure**.
 
 ## Configure shelves
 

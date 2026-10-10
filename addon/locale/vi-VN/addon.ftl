@@ -68,21 +68,21 @@ menuHelp-openReddit = Reddit
 menuHelp-openForum = Zotero Forum
 userGuide-start-title = Chào mừng đến với Zotero Syllabus
 userGuide-start-desc =
-    Biến bất kỳ bộ sưu tập Zotero nào thành danh sách đọc học phần — sắp xếp theo buổi học, đặt mức ưu tiên và theo dõi bài cần đọc tiếp.
+    Two ways to use a collection: Syllabus structures a course by class or week; Gallery is a reading list with covers and your own order — no classes required. Home, due dates, and an annotation feed sit alongside.
 userGuide-start-close = Nhắc tôi sau
 userGuide-exit = Thoát hướng dẫn
 optional-features-intro-title = Choose your views
 optional-features-intro-desc =
-    Pick which surfaces to show. You can change these anytime in Preferences. Syllabus view is recommended to get started.
+    Syllabus is for courses (classes, priorities, due dates). Gallery is for a personal reading list (covers and reading order) and does not need a syllabus. Turn on the surfaces you want — you can change them anytime in Preferences.
 optional-features-syllabus-title = Syllabus view
 optional-features-syllabus-desc =
-    Structure a collection by class session, drag readings into place, and edit priorities and instructions.
+    For a course: structure a collection by class or week, drag readings into place, and set priorities and instructions. Use Turn into Syllabus on the collection first.
 optional-features-gallery-title = Gallery view
 optional-features-gallery-desc =
-    Browse a collection as covers, magazine spreads, or cards — great for finding the next thing to open.
+    For a reading list — no classes needed: browse covers, previews, or cards and set your own reading order. Works on any collection, including ones that are also a syllabus.
 optional-features-explorer-title = Home view
 optional-features-explorer-desc =
-    A library home with shelves for recent items, upcoming deadlines, and more.
+    A library home with shelves for pinned items, recently read, annotations, deadlines, and more.
 optional-features-reading-schedule-title = Reading Schedule
 optional-features-reading-schedule-desc =
     A calendar tab that gathers class due dates across your syllabi so you can see what’s next.
@@ -101,6 +101,9 @@ optional-features-continue-desc =
 userGuide-collection-title = Bắt đầu từ một bộ sưu tập
 userGuide-collection-desc =
     Đề cương gắn với bộ sưu tập. Chúng tôi sẽ mở bộ sưu tập luyện tập “Tour đề cương” với một vài bài đọc mẫu.
+userGuide-gallery-vs-syllabus-title = Gallery vs Syllabus
+userGuide-gallery-vs-syllabus-desc =
+    Same collection, two toolbar views. Gallery browses it as a reading list (covers and your own order). Syllabus organizes it by class or week for a course — after Turn into Syllabus. You can switch anytime; this tour continues with Syllabus.
 userGuide-syllabusButton-title = Chuyển thành đề cương
 userGuide-syllabusButton-desc =
     Nhấp Chuyển thành đề cương trên thanh công cụ mục để chuyển bộ sưu tập này thành dàn ý học phần. Tour sẽ chuyển sang đó giúp bạn.
@@ -124,7 +127,7 @@ userGuide-readingSchedule-light-desc =
     The Reading Schedule tab gathers class due dates across your syllabi. Next opens it from the tab bar.
 userGuide-home-title = Home view
 userGuide-home-desc =
-    At the library root, switch to Home for shelves of recent items and upcoming deadlines. Next selects your library home.
+    At the library root, switch to Home for shelves of pinned items, recently read, and upcoming deadlines. Next selects your library home.
 userGuide-subcollections-title = Tùy chọn: thư mục buổi học
 userGuide-subcollections-desc =
     Muốn thư mục gương cho từng buổi? Bật Bộ sưu tập con buổi học trong Cài đặt. Để tắt trừ khi bạn muốn tiện ích quản lý thư mục con.
@@ -220,12 +223,12 @@ page-drop-import-file = Thả tệp để thêm vào bộ sưu tập này
 further-reading-heading = Đọc thêm
 sort-label = Sắp xếp
 further-reading-sort-aria = Sắp xếp phần đọc thêm
-further-reading-add-readings-aria = Thêm bài đọc vào phần đọc thêm
+further-reading-add-readings-aria = Add items to further reading
 sort-by-title = Tiêu đề
 sort-by-creator = Tác giả
 sort-by-date = Ngày
 further-reading-empty-desc = Các mục trong phần này chưa được gán vào buổi học nào.
-unnumbered-add-readings-aria = Thêm bài đọc vào phần không đánh số
+unnumbered-add-readings-aria = Add items to the unnumbered section
 unnumbered-add-note-aria = Thêm ghi chú vào phần không đánh số
 toc-empty = Không có buổi học
 placeholder-url = https://
@@ -244,8 +247,8 @@ class-move-down = Chuyển { $nomenclature } xuống
 class-delete = Xóa { $nomenclature }
 class-insert-here = Thêm { $nomenclature } tại đây
 class-dropzone-hint = Kéo mục vào { $nomenclature } { $number }
-class-add-readings = Thêm bài đọc
-class-add-readings-aria = Thêm bài đọc vào { $nomenclature } { $number }
+class-add-readings = Add items
+class-add-readings-aria = Add items to { $nomenclature } { $number }
 class-add-note = Thêm ghi chú
 class-note-priority = Ghi chú buổi học
 class-note-open = Mở ghi chú
@@ -371,9 +374,13 @@ priority-default-optional = Tùy chọn
 # Gallery
 gallery-pinned-header =
     Items you’ve pinned for quick access. Pin or unpin from an item’s context menu or the Reading Schedule. Collections you pin stay on Home and Reading Schedule, not in this folder.
-gallery-add-readings-aria = Thêm bài đọc vào bộ sưu tập này
+gallery-add-readings-aria = Add items to this collection
+gallery-add-items = Add items
 gallery-empty-filtered = Không có mục khớp.
 gallery-empty = Không có mục trong bộ sưu tập này.
+gallery-empty-title = Start a reading list
+gallery-empty-desc =
+    Add papers, books, or articles to this collection. Choose Reading order in the sort menu to arrange them, and optionally add a short description under the title.
 gallery-untagged = Không thẻ
 gallery-untagged-desc = Các mục trong phần này không có thẻ.
 gallery-uncredited = Không tác giả
@@ -382,7 +389,8 @@ gallery-empty-subcollections = Không có bộ sưu tập con hoặc mục trong
 gallery-unnumbered = Không số
 gallery-unnumbered-desc = Đã gán mà không có số buổi.
 gallery-sort-auto = Tự động
-gallery-sort-auto-title = Thứ tự tự động (danh sách đọc cá nhân, rồi lớp, rồi bộ sưu tập)
+gallery-sort-auto-title = Automatic order (reading order when set, otherwise collection order)
+gallery-sort-auto-title-syllabus = Automatic order (reading order, then class, then collection)
 gallery-sort-az = A–Z
 gallery-sort-az-title = Sắp xếp A–Z
 gallery-sort-date = Xuất bản
@@ -392,6 +400,7 @@ gallery-sort-date-added-title = Sắp xếp theo ngày thêm (mới nhất trư�
 gallery-sort-personal-order = Thứ tự đọc
 gallery-sort-personal-order-title = Thứ tự đọc cá nhân (kéo để sắp xếp lại)
 gallery-personal-order-unordered = Chưa sắp xếp
+gallery-personal-order-unordered-empty = Drag items here to remove them from your reading order
 gallery-personal-order-landing-label = Reading order
 gallery-personal-order-landing-empty = Drag items here to set your reading order
 personal-reading-order-menu-add = Thêm vào thứ tự đọc của bộ sưu tập
@@ -417,7 +426,7 @@ gallery-group-classes-title = Nhóm theo buổi học
 gallery-layout-cover = Bìa
 gallery-layout-cover-title = Ảnh bìa
 gallery-layout-card = Thẻ bài
-gallery-layout-card-title = Thẻ đề cương
+gallery-layout-card-title = Reading cards
 gallery-layout-annotations = Chú thích
 gallery-layout-annotations-title = Bìa kèm tất cả chú thích
 gallery-annotations-empty = Không có chú thích
@@ -466,7 +475,7 @@ gallery-save-globally-title = Lưu tùy chọn này làm mặc định cho mọi
 gallery-save-globally-active-title = Cài đặt bộ sưu tập này khác với mặc định. Nhấp để lưu làm mặc định.
 galleryTour-settings-title = Tùy chọn thư viện ảnh
 galleryTour-settings-desc =
-    Mở menu ở góc để đổi chế độ xem, sắp xếp và nhóm. Chúng tôi sẽ lần lượt giới thiệu ba bố cục.
+    Gallery is your reading-list view for this collection (separate from Syllabus classes). Open the menu in the corner to switch layout, sort, and grouping — we’ll walk through the layouts.
 galleryTour-cover-title = Chế độ xem Bìa
 galleryTour-cover-desc =
     Bìa hiện mỗi mục như ảnh bìa — sách, bài báo và trang web trong một cái nhìn.
@@ -475,7 +484,7 @@ galleryTour-magazine-desc =
     Xem trước hiện bìa cạnh đoạn trích, giống Chú thích nhưng là đoạn giới thiệu thay vì đánh dấu. Mục không có xem trước nằm thành hàng bìa.
 galleryTour-card-title = Chế độ xem Thẻ
 galleryTour-card-desc =
-    Thẻ dùng cùng bố cục đề cương, nhóm theo loại mục để các bài đọc tương tự nằm cạnh nhau.
+    Cards show title, creators, and notes in a reading column. Here they’re grouped by item type so similar items sit together.
 galleryTour-choose-title = Chọn mặc định
 galleryTour-choose-desc =
     Thư viện ảnh nên mở với bố cục nào? Bạn có thể đổi sau trong tùy chọn Zotero Syllabus hoặc bằng Lưu làm mặc định.
@@ -719,7 +728,7 @@ explorer-add-saved-search = Saved search…
 explorer-shelf-upcoming-deadlines = Upcoming reading deadlines
 explorer-shelf-upcoming-deadlines-desc = Due this week, or the next deadline within a month.
 explorer-shelf-pinned = Pinned
-explorer-shelf-pinned-desc = Items you’ve pinned, plus pinned collections (with next-up for syllabi).
+explorer-shelf-pinned-desc = Items and collections you’ve pinned for quick access.
 explorer-go-to-reading-schedule = Go to Reading Schedule
 explorer-go-to-my-annotations = Go to Annotation Feed
 explorer-shelf-watch-now = Watch now

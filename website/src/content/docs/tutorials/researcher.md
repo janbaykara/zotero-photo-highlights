@@ -42,6 +42,6 @@ If the project has phases (e.g. theory / methods / cases), [turn the collection 
 ## Daily loop
 
 1. Open **Home** at the library root.
-2. Work from **Pinned** and **Recently read**.
-3. Drop new finds into the project collection; skim in Gallery.
+2. Work from **Pinned**, **Recently read**, and **Recent annotations**.
+3. Drop new finds into the project collection; skim in Gallery (empty collections prompt you to start a reading list).
 4. End the session in Annotation Feed to recall what you highlighted.

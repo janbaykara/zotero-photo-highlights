@@ -3,7 +3,7 @@ title: Gallery
 description: Browse a collection as covers, cards, previews, or annotations.
 ---
 
-Browse one collection as covers, cards, a preview of excerpts, or an annotation stream. Switch with **Gallery** in the items toolbar.
+Browse one collection as a **reading list** — covers, cards, a preview of excerpts, or an annotation stream — without turning it into a syllabus. Switch with **Gallery** in the items toolbar.
 
 ![Gallery](../../../assets/images/gallery.png)
 
@@ -15,10 +15,12 @@ Click a cover or card to select it in Zotero; double-click opens the best attach
 
 Under the title you can **Add a description…** — a short blurb for the reading list. It is stored on the collection’s Personal Reading Order note (not the Syllabus note) and appears at the top of Gallery exports and published gallery pages. If you later turn the collection into a syllabus, that blurb is copied onto the Syllabus description when the syllabus is created.
 
+An empty collection shows a **Start a reading list** prompt with a short how-to (add items, set reading order, optional description). **Add items** opens the library picker at the library root so you can choose items from elsewhere in the library.
+
 ## View modes
 
 - **Cover** — artwork in a grid. Best for scanning books, papers, and web pages at a glance.
-- **Card** — the same syllabus item cards, in a narrower reading column. **Density** (Row / Standard / Expanded) is available in this mode.
+- **Card** — reading cards (title, creators, notes) in a narrower column. **Density** (Row / Standard / Expanded) is available in this mode.
 - **Preview** — covers with excerpt blurbs beside them, using the same layout as Annotations. Items without a preview sit in a horizontal cover row.
 - **Annotations** — covers with every highlight and note on the item. **Quotes** orders those excerpts by location in the document or by date added. Check **Show items with no annotations** to keep items without highlights in the list.
 
@@ -39,7 +41,8 @@ Under the title you can **Add a description…** — a short blurb for the readi
 - **Creator**
 - **Tags**
 - **Collections** — child collections (when this folder has any).
-- **Classes** — syllabus collections only.
+
+On Home collection shelves (not Gallery itself), syllabus collections can also **Group by Classes**.
 
 ## Gallery notes
 

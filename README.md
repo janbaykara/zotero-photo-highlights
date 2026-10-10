@@ -2,7 +2,7 @@
 
 ![zotero target version](https://img.shields.io/badge/Zotero-7%2F8%2F9%2F10-green?style=flat-square&logo=zotero&logoColor=CC2936)
 
-A Zotero add-on / plugin that turns your collections into syllabi and course reading lists. Order items by class, browse them in Gallery, keep a Home of what to open next, follow due dates on Reading Schedule, and review highlights in Annotation Feed.
+A Zotero add-on / plugin for course syllabi and personal reading lists. **Syllabus** structures a collection by class; **Gallery** browses any collection as a reading list with your own order. Home, Reading Schedule, and Annotation Feed sit alongside.
 
 **Documentation:** [janbaykara.github.io/zotero-syllabus](https://janbaykara.github.io/zotero-syllabus/) (also **Help → Zotero Syllabus Documentation** in the app).
 
@@ -76,8 +76,8 @@ The plugin has five surfaces (toggle in **Preferences → Zotero Syllabus → Vi
 
 1. **Syllabus** — structure a collection by class.
 2. **Reading Schedule** — due dates across all your syllabi.
-3. **Gallery** — browse a collection as covers, cards, or a preview.
-4. **Home** — library shelves for what to open next.
+3. **Gallery** — browse a collection as a reading list (covers, cards, or a preview) with your own reading order.
+4. **Home** — library shelves for what to open next (pinned, recently read, annotations, deadlines, and more).
 5. **Annotation Feed** — your highlights in one timeline.
 
 Shared tools: pinning, Gallery notes, [publishing a collection](https://janbaykara.github.io/zotero-syllabus/how-to/print-export-publish/) (syllabus or reading list), and [importing a reading list](https://janbaykara.github.io/zotero-syllabus/how-to/import-reading-lists/) from the browser. Start with the [student](https://janbaykara.github.io/zotero-syllabus/tutorials/student/), [educator](https://janbaykara.github.io/zotero-syllabus/tutorials/educator/), or [researcher](https://janbaykara.github.io/zotero-syllabus/tutorials/researcher/) tutorial.

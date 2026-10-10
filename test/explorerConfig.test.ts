@@ -21,15 +21,16 @@ const COLLECTION_COVER_MIGRATION_PREF = `${config.prefsPrefix}.explorerCollectio
 const DEADLINES_COVER_MIGRATION_PREF = `${config.prefsPrefix}.explorerDeadlinesCoverDefault`;
 
 describe("explorer shelves", function () {
-  it("puts pinned and upcoming deadlines first on the default homepage", function () {
+  it("puts pinned, recently read, and annotations first on the default homepage", function () {
     assert.deepEqual(
       defaultExplorerShelves().map((shelf) => shelf.type),
       [
         "pinned",
+        "recently-read",
+        "recent-annotations",
         "upcoming-deadlines",
         "watch-now",
         "listen-now",
-        "recently-read",
         "recently-added",
       ],
     );
@@ -60,8 +61,34 @@ describe("explorer shelves", function () {
     );
   });
 
-  it("replaces the previous media default with pinned and deadlines first", function () {
+  it("replaces the previous media default with the current homepage", function () {
     const shelves = coerceExplorerShelves([
+      { id: "watch-now", type: "watch-now", layout: "cover" },
+      { id: "listen-now", type: "listen-now", layout: "cover" },
+      {
+        id: "recently-read",
+        type: "recently-read",
+        layout: "cover",
+        days: 30,
+        limit: 10,
+      },
+      {
+        id: "recently-added",
+        type: "recently-added",
+        layout: "magazine",
+        days: 14,
+      },
+    ]);
+    assert.deepEqual(
+      shelves.map((shelf) => shelf.type),
+      defaultExplorerShelves().map((shelf) => shelf.type),
+    );
+  });
+
+  it("replaces the pinned-and-deadlines-first default with the current homepage", function () {
+    const shelves = coerceExplorerShelves([
+      { id: "pinned", type: "pinned", layout: "cover" },
+      { id: "upcoming-deadlines", type: "upcoming-deadlines", layout: "cover" },
       { id: "watch-now", type: "watch-now", layout: "cover" },
       { id: "listen-now", type: "listen-now", layout: "cover" },
       {

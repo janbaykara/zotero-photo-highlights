@@ -65,6 +65,16 @@ const PRE_PINNED_DEFAULT_SHELF_TYPES = [
   "recently-added",
 ] as const;
 
+/** Defaults before recently-read / annotations were promoted above deadlines. */
+const PINNED_DEADLINES_FIRST_DEFAULT_SHELF_TYPES = [
+  "pinned",
+  "upcoming-deadlines",
+  "watch-now",
+  "listen-now",
+  "recently-read",
+  "recently-added",
+] as const;
+
 export type ExplorerShelfType = (typeof EXPLORER_SHELF_TYPES)[number];
 
 export type LibraryViewMode = "collection" | "explorer";
@@ -202,9 +212,6 @@ function resolveShelfLayout(
 export function defaultExplorerShelves(): ExplorerShelf[] {
   return [
     { id: "pinned", type: "pinned", layout: "cover" },
-    { id: "upcoming-deadlines", type: "upcoming-deadlines", layout: "cover" },
-    { id: "watch-now", type: "watch-now", layout: "cover" },
-    { id: "listen-now", type: "listen-now", layout: "cover" },
     {
       id: "recently-read",
       type: "recently-read",
@@ -212,6 +219,15 @@ export function defaultExplorerShelves(): ExplorerShelf[] {
       days: 30,
       limit: 10,
     },
+    {
+      id: "recent-annotations",
+      type: "recent-annotations",
+      layout: "card",
+      limit: EXPLORER_ANNOTATION_SHELF_LIMIT,
+    },
+    { id: "upcoming-deadlines", type: "upcoming-deadlines", layout: "cover" },
+    { id: "watch-now", type: "watch-now", layout: "cover" },
+    { id: "listen-now", type: "listen-now", layout: "cover" },
     {
       id: "recently-added",
       type: "recently-added",
@@ -399,7 +415,8 @@ export function coerceExplorerShelves(value: unknown): ExplorerShelf[] {
   if (
     types.join(",") === LEGACY_DEFAULT_SHELF_TYPES.join(",") ||
     types.join(",") === PREVIOUS_DEFAULT_SHELF_TYPES.join(",") ||
-    types.join(",") === PRE_PINNED_DEFAULT_SHELF_TYPES.join(",")
+    types.join(",") === PRE_PINNED_DEFAULT_SHELF_TYPES.join(",") ||
+    types.join(",") === PINNED_DEADLINES_FIRST_DEFAULT_SHELF_TYPES.join(",")
   ) {
     return defaultExplorerShelves();
   }

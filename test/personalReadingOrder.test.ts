@@ -1,11 +1,12 @@
 import { assert } from "chai";
 import {
-  PERSONAL_READING_ORDER_NOTE_TITLE,
+  PERSONAL_READING_ORDER_DOCUMENT_PREFIX,
   PERSONAL_READING_ORDER_PRE_ATTR,
   PERSONAL_READING_ORDER_VERSION,
   applyPersonalReadingOrder,
   looksLikePersonalReadingOrderPayload,
   parsePersonalReadingOrderNote,
+  personalReadingOrderDocumentHeading,
   prunePersonalReadingOrderKeys,
   remapPersonalReadingOrderKeys,
   serializePersonalReadingOrderNote,
@@ -21,7 +22,11 @@ describe("personal reading order", function () {
       done: ["aaa"],
       assignmentDone: ["asg-1"],
     });
-    assert.include(html, PERSONAL_READING_ORDER_NOTE_TITLE);
+    assert.include(
+      html,
+      `<h1>${personalReadingOrderDocumentHeading(null)}</h1>`,
+    );
+    assert.include(html, PERSONAL_READING_ORDER_DOCUMENT_PREFIX);
     assert.include(html, PLUGIN_JSON_HEADING);
     assert.include(html, PERSONAL_READING_ORDER_PRE_ATTR);
     // JSON in <pre> is HTML-escaped (quotes → &quot;).
@@ -30,6 +35,20 @@ describe("personal reading order", function () {
     assert.include(html, "✅");
     assert.include(html, "&quot;done&quot;");
     assert.include(html, "&quot;assignmentDone&quot;");
+  });
+
+  it("uses Personal reading order - collection name as the note H1", function () {
+    const collection = { name: "My List" } as Zotero.Collection;
+    const html = serializePersonalReadingOrderNote(
+      {
+        version: PERSONAL_READING_ORDER_VERSION,
+        order: [],
+        done: [],
+        assignmentDone: [],
+      },
+      collection,
+    );
+    assert.include(html, "<h1>Personal reading order - My List</h1>");
   });
 
   it("parses the JSON payload from the note envelope", function () {

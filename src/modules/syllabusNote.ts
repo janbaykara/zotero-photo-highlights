@@ -114,9 +114,22 @@ type CollectionIdentifier =
   number | Parameters<typeof Zotero.Collections.getByLibraryAndKey>;
 
 export const SYLLABUS_NOTE_TAG = "zotero-syllabus";
+/** Legacy / fallback note title; recognition also accepts titles that start with this. */
 export const SYLLABUS_NOTE_TITLE = "Syllabus";
+/** Prefix for the human-readable note H1 (Zotero’s note title). */
+export const SYLLABUS_NOTE_DOCUMENT_PREFIX = "Syllabus document";
 export const SYLLABUS_EXTRA_KEY = "syllabus";
 export const SYLLABUS_NOTE_PRE_ATTR = "data-zotero-syllabus";
+
+/** H1 / note title: `Syllabus document - {collection name}`. */
+export function syllabusNoteDocumentHeading(
+  collectionName?: string | null,
+): string {
+  const name = (collectionName || "").trim();
+  return name
+    ? `${SYLLABUS_NOTE_DOCUMENT_PREFIX} - ${name}`
+    : SYLLABUS_NOTE_DOCUMENT_PREFIX;
+}
 
 export function generateExportId(): string {
   return `export-${uuidv7()}`;

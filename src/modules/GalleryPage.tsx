@@ -465,6 +465,46 @@ export function GalleryPage({
   const emptyMessage = isFiltered
     ? getString("gallery-empty-filtered")
     : getString("gallery-empty");
+  const showReadingListEmpty =
+    !isFiltered &&
+    isCollectionScope &&
+    !isPinnedFolder &&
+    syllabusItems.length === 0;
+  const handleAddItems = useCallback(() => {
+    void pickAndAddItemsToCollection(collectionIdOrZero).catch((err) => {
+      ztoolkit.log("Error adding items to collection:", err);
+    });
+  }, [collectionIdOrZero]);
+  const readingListEmptyState = (
+    <div
+      className="in-[.print]:hidden mb-2 rounded-lg border border-quinary bg-quinary/40 p-6 space-y-3"
+      data-tour="gallery-empty-state"
+    >
+      <div className="text-xl font-semibold text-primary">
+        {getString("gallery-empty-title")}
+      </div>
+      <p className="text-secondary text-base m-0">
+        {getString("gallery-empty-desc")}
+      </p>
+      {canAddReading ? (
+        <div className="pt-1">
+          <AddReadingButton
+            label={getString("gallery-add-items")}
+            title={getString("gallery-add-readings-aria")}
+            ariaLabel={getString("gallery-add-readings-aria")}
+            onClick={() => {
+              void pickAndAddItemsToCollection(collectionIdOrZero, {
+                openLibraryRoot: true,
+              }).catch((err) => {
+                ztoolkit.log("Error adding items to collection:", err);
+              });
+            }}
+            className="justify-start p-0"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
 
   /* When Annotations mode hides items without annotations, also hide groups
      (and subcollection branches) that then have nothing left to show. */
@@ -1048,7 +1088,11 @@ export function GalleryPage({
       return null;
     }
     if (visibleFlatItems.length === 0) {
-      return <p className="text-secondary text-lg">{emptyMessage}</p>;
+      return showReadingListEmpty ? (
+        readingListEmptyState
+      ) : (
+        <p className="text-secondary text-lg">{emptyMessage}</p>
+      );
     }
     const listClass =
       layout === "card"
@@ -1273,165 +1317,180 @@ export function GalleryPage({
                 (() => {
                   const browseBody = (
                     <>
-                      {effectiveGroupBy === "none" &&
-                        (!annotationGroupsReady ? null : visibleFlatItems.length ===
-                          0 ? (
-                          <p className="text-secondary text-lg">
-                            {emptyMessage}
-                          </p>
-                        ) : (
-                          renderItems(visibleFlatItems, "all")
-                        ))}
-
-                      {effectiveGroupBy === "auto" &&
-                        (syllabusItems.length === 0 ? (
-                          <p className="text-secondary text-lg">
-                            {emptyMessage}
-                          </p>
-                        ) : (
-                          <MagazineHome
-                            items={orderGalleryItems(
-                              syllabusItems.map(({ zoteroItem }) => zoteroItem),
-                            )}
-                            tagGroups={tagGroups}
-                            classDesks={magazineClassDesks}
-                            subcollectionRoot={subcollectionRoot}
-                            sortBy="auto"
-                            packing={magazinePacking}
-                            selectedItemIds={selectedItemIds}
-                            onClick={handleClick}
-                            onDoubleClick={handleDoubleClick}
-                            onContextMenu={handleContextMenu}
-                          />
-                        ))}
-
-                      {effectiveGroupBy === "type" &&
-                        (!annotationGroupsReady ? null : visibleTypeGroups.length ===
-                          0 ? (
-                          <p className="text-secondary text-lg">
-                            {emptyMessage}
-                          </p>
-                        ) : (
-                          visibleTypeGroups.map(
-                            ({ itemType, label, items }) => (
-                              <section
-                                key={itemType}
-                                className="syllabus-gallery-section"
-                                data-gallery-group={`type-${itemType}`}
-                              >
-                                <GalleryGroupHeading
-                                  icon={{ kind: "item-type", itemType }}
-                                >
-                                  {label}
-                                </GalleryGroupHeading>
-                                {renderItems(items, `type-${itemType}`)}
-                              </section>
-                            ),
-                          )
-                        ))}
-
-                      {effectiveGroupBy === "creator" &&
-                        (!annotationGroupsReady ? null : visibleCreatorGroups.length ===
-                            0 && visibleUncreditedItems.length === 0 ? (
-                          <p className="text-secondary text-lg">
-                            {emptyMessage}
-                          </p>
-                        ) : (
-                          <>
-                            {visibleCreatorGroups.map(
-                              ({ key, label, items }, index) => (
-                                <section
-                                  key={key}
-                                  className="syllabus-gallery-section"
-                                  data-gallery-group={`creator-${index}`}
-                                >
-                                  <GalleryGroupHeading
-                                    icon={{ kind: "creator" }}
-                                  >
-                                    {label}
-                                  </GalleryGroupHeading>
-                                  {renderItems(items, `creator-${key}`)}
-                                </section>
-                              ),
-                            )}
-                            {visibleUncreditedItems.length > 0 && (
-                              <section
-                                className="syllabus-gallery-section"
-                                data-gallery-group="uncredited"
-                              >
-                                <GalleryGroupHeading
-                                  icon={{ kind: "uncredited" }}
-                                >
-                                  {getString("gallery-uncredited")}
-                                </GalleryGroupHeading>
-                                <p className="syllabus-gallery-class-description">
-                                  {getString("gallery-uncredited-desc")}
-                                </p>
-                                {renderItems(
-                                  visibleUncreditedItems,
-                                  "uncredited",
-                                )}
-                              </section>
-                            )}
-                          </>
-                        ))}
-
-                      {effectiveGroupBy === "tags" &&
-                        (!annotationGroupsReady ? null : visibleTagGroups.length ===
-                            0 && visibleUntaggedItems.length === 0 ? (
-                          <p className="text-secondary text-lg">
-                            {emptyMessage}
-                          </p>
-                        ) : (
-                          <>
-                            {visibleTagGroups.map(({ tag, items }, index) => (
-                              <section
-                                key={tag}
-                                className="syllabus-gallery-section"
-                                data-gallery-group={`tag-${index}`}
-                              >
-                                <GalleryGroupHeading icon={{ kind: "tag" }}>
-                                  {tag}
-                                </GalleryGroupHeading>
-                                {renderItems(items, `tag-${tag}`)}
-                              </section>
+                      {showReadingListEmpty ? (
+                        readingListEmptyState
+                      ) : (
+                        <>
+                          {effectiveGroupBy === "none" &&
+                            (!annotationGroupsReady ? null : visibleFlatItems.length ===
+                              0 ? (
+                              <p className="text-secondary text-lg">
+                                {emptyMessage}
+                              </p>
+                            ) : (
+                              renderItems(visibleFlatItems, "all")
                             ))}
-                            {visibleUntaggedItems.length > 0 && (
-                              <section
-                                className="syllabus-gallery-section"
-                                data-gallery-group="untagged"
-                              >
-                                <GalleryGroupHeading
-                                  icon={{ kind: "untagged" }}
-                                >
-                                  {getString("gallery-untagged")}
-                                </GalleryGroupHeading>
-                                <p className="syllabus-gallery-class-description">
-                                  {getString("gallery-untagged-desc")}
-                                </p>
-                                {renderItems(visibleUntaggedItems, "untagged")}
-                              </section>
-                            )}
-                          </>
-                        ))}
 
-                      {effectiveGroupBy === "subcollections" &&
-                        (!annotationGroupsReady ? null : !visibleSubcollectionRoot ||
-                          !subtreeHasContent(visibleSubcollectionRoot) ? (
-                          <p className="text-secondary text-lg">
-                            {isFiltered
-                              ? emptyMessage
-                              : getString("gallery-empty-subcollections")}
-                          </p>
-                        ) : (
-                          <GallerySubcollectionSection
-                            node={visibleSubcollectionRoot}
-                            depth={0}
-                            isRoot
-                            resolveItems={resolveSubcollectionItems}
-                            renderItems={renderItems}
-                          />
-                        ))}
+                          {effectiveGroupBy === "auto" &&
+                            (syllabusItems.length === 0 ? (
+                              <p className="text-secondary text-lg">
+                                {emptyMessage}
+                              </p>
+                            ) : (
+                              <MagazineHome
+                                items={orderGalleryItems(
+                                  syllabusItems.map(
+                                    ({ zoteroItem }) => zoteroItem,
+                                  ),
+                                )}
+                                tagGroups={tagGroups}
+                                classDesks={magazineClassDesks}
+                                subcollectionRoot={subcollectionRoot}
+                                sortBy="auto"
+                                packing={magazinePacking}
+                                selectedItemIds={selectedItemIds}
+                                onClick={handleClick}
+                                onDoubleClick={handleDoubleClick}
+                                onContextMenu={handleContextMenu}
+                              />
+                            ))}
+
+                          {effectiveGroupBy === "type" &&
+                            (!annotationGroupsReady ? null : visibleTypeGroups.length ===
+                              0 ? (
+                              <p className="text-secondary text-lg">
+                                {emptyMessage}
+                              </p>
+                            ) : (
+                              visibleTypeGroups.map(
+                                ({ itemType, label, items }) => (
+                                  <section
+                                    key={itemType}
+                                    className="syllabus-gallery-section"
+                                    data-gallery-group={`type-${itemType}`}
+                                  >
+                                    <GalleryGroupHeading
+                                      icon={{ kind: "item-type", itemType }}
+                                    >
+                                      {label}
+                                    </GalleryGroupHeading>
+                                    {renderItems(items, `type-${itemType}`)}
+                                  </section>
+                                ),
+                              )
+                            ))}
+
+                          {effectiveGroupBy === "creator" &&
+                            (!annotationGroupsReady ? null : visibleCreatorGroups.length ===
+                                0 && visibleUncreditedItems.length === 0 ? (
+                              <p className="text-secondary text-lg">
+                                {emptyMessage}
+                              </p>
+                            ) : (
+                              <>
+                                {visibleCreatorGroups.map(
+                                  ({ key, label, items }, index) => (
+                                    <section
+                                      key={key}
+                                      className="syllabus-gallery-section"
+                                      data-gallery-group={`creator-${index}`}
+                                    >
+                                      <GalleryGroupHeading
+                                        icon={{ kind: "creator" }}
+                                      >
+                                        {label}
+                                      </GalleryGroupHeading>
+                                      {renderItems(items, `creator-${key}`)}
+                                    </section>
+                                  ),
+                                )}
+                                {visibleUncreditedItems.length > 0 && (
+                                  <section
+                                    className="syllabus-gallery-section"
+                                    data-gallery-group="uncredited"
+                                  >
+                                    <GalleryGroupHeading
+                                      icon={{ kind: "uncredited" }}
+                                    >
+                                      {getString("gallery-uncredited")}
+                                    </GalleryGroupHeading>
+                                    <p className="syllabus-gallery-class-description">
+                                      {getString("gallery-uncredited-desc")}
+                                    </p>
+                                    {renderItems(
+                                      visibleUncreditedItems,
+                                      "uncredited",
+                                    )}
+                                  </section>
+                                )}
+                              </>
+                            ))}
+
+                          {effectiveGroupBy === "tags" &&
+                            (!annotationGroupsReady ? null : visibleTagGroups.length ===
+                                0 && visibleUntaggedItems.length === 0 ? (
+                              <p className="text-secondary text-lg">
+                                {emptyMessage}
+                              </p>
+                            ) : (
+                              <>
+                                {visibleTagGroups.map(
+                                  ({ tag, items }, index) => (
+                                    <section
+                                      key={tag}
+                                      className="syllabus-gallery-section"
+                                      data-gallery-group={`tag-${index}`}
+                                    >
+                                      <GalleryGroupHeading
+                                        icon={{ kind: "tag" }}
+                                      >
+                                        {tag}
+                                      </GalleryGroupHeading>
+                                      {renderItems(items, `tag-${tag}`)}
+                                    </section>
+                                  ),
+                                )}
+                                {visibleUntaggedItems.length > 0 && (
+                                  <section
+                                    className="syllabus-gallery-section"
+                                    data-gallery-group="untagged"
+                                  >
+                                    <GalleryGroupHeading
+                                      icon={{ kind: "untagged" }}
+                                    >
+                                      {getString("gallery-untagged")}
+                                    </GalleryGroupHeading>
+                                    <p className="syllabus-gallery-class-description">
+                                      {getString("gallery-untagged-desc")}
+                                    </p>
+                                    {renderItems(
+                                      visibleUntaggedItems,
+                                      "untagged",
+                                    )}
+                                  </section>
+                                )}
+                              </>
+                            ))}
+
+                          {effectiveGroupBy === "subcollections" &&
+                            (!annotationGroupsReady ? null : !visibleSubcollectionRoot ||
+                              !subtreeHasContent(visibleSubcollectionRoot) ? (
+                              <p className="text-secondary text-lg">
+                                {isFiltered
+                                  ? emptyMessage
+                                  : getString("gallery-empty-subcollections")}
+                              </p>
+                            ) : (
+                              <GallerySubcollectionSection
+                                node={visibleSubcollectionRoot}
+                                depth={0}
+                                isRoot
+                                resolveItems={resolveSubcollectionItems}
+                                renderItems={renderItems}
+                              />
+                            ))}
+                        </>
+                      )}
                     </>
                   );
                   if (
@@ -1458,23 +1517,15 @@ export function GalleryPage({
                   );
                 })()}
 
-              {canAddReading && (
+              {canAddReading && !showReadingListEmpty ? (
                 <AddReadingButton
                   className="mt-6"
+                  label={getString("gallery-add-items")}
                   title={getString("gallery-add-readings-aria")}
                   ariaLabel={getString("gallery-add-readings-aria")}
-                  onClick={() => {
-                    void pickAndAddItemsToCollection(collectionIdOrZero).catch(
-                      (err) => {
-                        ztoolkit.log(
-                          "Error adding readings to collection:",
-                          err,
-                        );
-                      },
-                    );
-                  }}
+                  onClick={handleAddItems}
                 />
-              )}
+              ) : null}
             </div>
           </GalleryViewportProvider>
         </div>

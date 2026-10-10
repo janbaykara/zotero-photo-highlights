@@ -821,6 +821,7 @@ async function showUserGuide(win: _ZoteroTypes.MainWindow, force = false) {
   const doc = win.document;
   let playgroundCollection: Zotero.Collection | null = null;
   const enableSyllabus = isOptionalFeatureEnabled("syllabus");
+  const enableGallery = isOptionalFeatureEnabled("gallery");
   const enableSchedule = isOptionalFeatureEnabled("readingSchedule");
   const enableExplorer = isOptionalFeatureEnabled("explorer");
   const hasHandsOn = enableSyllabus || enableSchedule || enableExplorer;
@@ -858,6 +859,30 @@ async function showUserGuide(win: _ZoteroTypes.MainWindow, force = false) {
           await resolvePlaygroundCollection(playgroundCollection);
       },
     });
+
+    if (enableGallery) {
+      guide.addStep({
+        title: getString("userGuide-gallery-vs-syllabus-title"),
+        description: getString("userGuide-gallery-vs-syllabus-desc"),
+        element: () =>
+          doc.querySelector("#syllabus-view-mode-gallery") ||
+          findSyllabusTourToolbarTarget(win) ||
+          doc.documentElement!,
+        ...exitableMidStepButtons(win),
+        showProgress: true,
+        onBeforeRender: async () => {
+          win.Zotero_Tabs?.select("zotero-pane");
+          playgroundCollection =
+            await resolvePlaygroundCollection(playgroundCollection);
+          await waitForElement(
+            win,
+            () =>
+              doc.querySelector("#syllabus-view-mode-gallery") ||
+              findSyllabusTourToolbarTarget(win),
+          );
+        },
+      });
+    }
 
     guide.addStep({
       title: getString("userGuide-syllabusButton-title"),

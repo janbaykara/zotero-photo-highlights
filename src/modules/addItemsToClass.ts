@@ -275,6 +275,7 @@ async function pickAndRun(
   key: string,
   collectionId: number,
   run: (items: Zotero.Item[]) => Promise<void>,
+  options?: { openLibraryRoot?: boolean },
 ): Promise<void> {
   if (pickingKeys.has(key)) {
     return;
@@ -282,8 +283,13 @@ async function pickAndRun(
   pickingKeys.add(key);
   try {
     const collection = getCachedCollectionById(collectionId);
+    const libraryID = collection?.libraryID;
     const items = await pickLibraryItems({
-      libraryID: collection?.libraryID,
+      libraryID,
+      initialFolder:
+        options?.openLibraryRoot && libraryID != null
+          ? `L${libraryID}`
+          : undefined,
     });
     if (items.length === 0) {
       return;
@@ -324,8 +330,12 @@ export async function pickAndAddItemsToFurtherReading(
 
 export async function pickAndAddItemsToCollection(
   collectionId: number,
+  options?: { openLibraryRoot?: boolean },
 ): Promise<void> {
-  await pickAndRun(`${collectionId}:collection`, collectionId, (items) =>
-    addItemsToCollection(items, collectionId),
+  await pickAndRun(
+    `${collectionId}:collection`,
+    collectionId,
+    (items) => addItemsToCollection(items, collectionId),
+    options,
   );
 }

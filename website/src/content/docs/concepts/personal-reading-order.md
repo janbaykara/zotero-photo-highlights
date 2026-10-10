@@ -3,7 +3,7 @@ title: Personal reading order
 description: Your own flat reading sequence for a collection, separate from class structure.
 ---
 
-**Personal reading order** is a flat list of item keys you want to read in — stored separately from syllabus class structure. Use it when class order is not how you plan to tackle the pile. The same note can also hold an optional **Gallery description** for the collection (shown under the Gallery title and on published reading-list pages).
+**Personal reading order** is a flat list of item keys you want to read in — stored separately from syllabus class structure in a note titled **Personal reading order -** your collection name. Use it when class order is not how you plan to tackle the pile. The same note can also hold an optional **Gallery description** for the collection (shown under the Gallery title and on published reading-list pages).
 
 ## What it affects
 
@@ -17,6 +17,6 @@ Reading done status for this flow is tied to personal reading order (including m
 
 ## How to use it
 
-From item context menus on a collection, use **Add to collection reading order** / **Remove from collection reading order** (wording may follow your Zotero language). Adding places items at the head of the personal order; removing drops them from it. Reorder via Gallery’s **Reading order** sort.
+From item context menus on a collection, use **Add to collection reading order** / **Remove from collection reading order** (wording may follow your Zotero language). Adding places items at the head of the personal order; removing drops them from it. Reorder via Gallery’s **Reading order** sort — drag into the **Unordered items** zone (always shown, even when empty) to take items out of the list.
 
 For day-to-day studying, combine personal order with [pinning](/zotero-syllabus/how-to/pinning/) the collection so Home always shows the right next item.

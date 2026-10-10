@@ -748,7 +748,11 @@ function ExplorerShelfSettingsMenu({
                   options={sortModes.map((mode) => ({
                     mode,
                     label: getString(SORT_LABEL_IDS[mode]),
-                    title: getString(SORT_TITLE_IDS[mode]),
+                    title: getString(
+                      mode === "auto" && isSyllabus
+                        ? "gallery-sort-auto-title-syllabus"
+                        : SORT_TITLE_IDS[mode],
+                    ),
                     Icon: SORT_ICONS[mode],
                   }))}
                 />

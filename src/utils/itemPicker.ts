@@ -14,9 +14,15 @@ type SelectItemsDialogIO = {
 /**
  * Open Zotero’s Select Items dialog (library tree + search).
  * Returns [] on cancel, in tests, or if the window cannot open.
+ *
+ * The dialog’s collection tree opens on `lastViewedFolder`. Pass
+ * `initialFolder` (e.g. `L1` for a library root) to override for this
+ * open only; the previous folder pref is restored when the dialog closes.
  */
 export async function pickLibraryItems(options?: {
   libraryID?: number;
+  /** Collection-tree id to select initially (e.g. `L1`). */
+  initialFolder?: string;
 }): Promise<Zotero.Item[]> {
   if (isTestEnv()) {
     return [];
@@ -38,6 +44,13 @@ export async function pickLibraryItems(options?: {
     io.filterLibraryIDs = [options.libraryID];
   }
 
+  const folderPref = "lastViewedFolder";
+  const previousFolder =
+    options?.initialFolder != null ? Zotero.Prefs.get(folderPref) : undefined;
+  if (options?.initialFolder != null) {
+    Zotero.Prefs.set(folderPref, options.initialFolder);
+  }
+
   try {
     win.openDialog(
       "chrome://zotero/content/selectItemsDialog.xhtml",
@@ -49,6 +62,10 @@ export async function pickLibraryItems(options?: {
   } catch (error) {
     ztoolkit.log("Error opening item picker:", error);
     return [];
+  } finally {
+    if (previousFolder !== undefined) {
+      Zotero.Prefs.set(folderPref, previousFolder);
+    }
   }
 
   const ids = Array.isArray(io.dataOut)

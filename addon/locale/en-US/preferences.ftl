@@ -23,13 +23,16 @@ pref-advanced-demo-alt =
     .alt = Preview of advanced editing
 pref-enable-syllabus =
     .label = Syllabus view
-pref-enable-syllabus-desc = Show the Syllabus / Checklist view for structuring collections by class.
+pref-enable-syllabus-desc =
+    Course structure by class or week (priorities, instructions, due dates). Use Turn into Syllabus on a collection first.
 pref-enable-gallery =
     .label = Gallery view
-pref-enable-gallery-desc = Browse a collection as covers, magazine spreads, or cards.
+pref-enable-gallery-desc =
+    Reading list with covers, previews, or cards and your own reading order — no classes required.
 pref-enable-explorer =
     .label = Home view
-pref-enable-explorer-desc = Show a library home with shelves for recent items and upcoming deadlines.
+pref-enable-explorer-desc =
+    Library home with shelves for pinned items, recently read, annotations, deadlines, and more.
 pref-enable-reading-schedule =
     .label = Reading Schedule tab
 pref-enable-reading-schedule-desc = Open a calendar tab that gathers class due dates across your syllabi.
