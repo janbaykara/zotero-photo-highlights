@@ -5060,7 +5060,7 @@ button.syllabus-explorer-class-segment-header:focus-visible {
   border: 0;
   background: transparent;
   color: var(--fill-primary, inherit);
-  font: inherit;
+  font-family: system-ui, sans-serif;
   font-size: 0.82rem;
   line-height: 1.35;
   text-align: start;
@@ -5068,7 +5068,9 @@ button.syllabus-explorer-class-segment-header:focus-visible {
 }
 
 .syllabus-my-annotations-stream-related-item:hover
-  .syllabus-my-annotations-stream-related-label {
+  .syllabus-my-annotations-stream-related-snippet,
+.syllabus-my-annotations-stream-related-item:hover
+  .syllabus-my-annotations-stream-related-parent {
   text-decoration: underline;
   text-underline-offset: 0.12em;
 }
@@ -5089,27 +5091,55 @@ button.syllabus-explorer-class-segment-header:focus-visible {
   background-size: contain;
 }
 
-.syllabus-my-annotations-stream-related-ann-icon {
+/* Zotero reader “highlight” glyph (square with A). */
+.syllabus-my-annotations-stream-related-highlight-icon {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 14px;
   height: 14px;
-  border-radius: 3px;
-  background: var(--highlight-color, #ffd400);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-  text-shadow: 0 0 1px rgba(0, 0, 0, 0.35);
+  display: block;
+  background: url("chrome://zotero/skin/16/universal/annotate-highlight.svg")
+    no-repeat center / contain;
+  fill: var(--fill-secondary, #888);
+  -moz-context-properties: fill, fill-opacity;
 }
 
 .syllabus-my-annotations-stream-related-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.syllabus-my-annotations-stream-related-snippet {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: system-ui, sans-serif;
+}
+
+.syllabus-my-annotations-stream-related-snippet
+  .syllabus-magazine-highlight-mark {
+  font-family: var(--syllabus-magazine-serif);
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.syllabus-my-annotations-stream-related-sep {
+  flex-shrink: 0;
+  color: var(--fill-secondary, #888);
+}
+
+.syllabus-my-annotations-stream-related-parent {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: system-ui, sans-serif;
+  color: var(--fill-secondary, #888);
 }
 
 .syllabus-my-annotations-load-previous-wrap {

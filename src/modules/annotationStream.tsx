@@ -754,12 +754,16 @@ function AnnotationRelatedItems({
       <ul className="syllabus-my-annotations-stream-related-list">
         {related.map((item) => {
           const isAnnotation = item.itemType === "annotation";
+          const tip = item.parentTitle
+            ? `${item.title} · ${item.parentTitle}`
+            : item.title;
+          const highlightColor = item.color || DEFAULT_HIGHLIGHT_COLOR;
           return (
             <li key={item.id}>
               <button
                 type="button"
                 className="syllabus-my-annotations-stream-related-item"
-                title={item.title}
+                title={tip}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -768,17 +772,9 @@ function AnnotationRelatedItems({
               >
                 {isAnnotation ? (
                   <span
-                    className="syllabus-my-annotations-stream-related-ann-icon"
-                    style={
-                      {
-                        "--highlight-color":
-                          item.color || DEFAULT_HIGHLIGHT_COLOR,
-                      } as JSX.CSSProperties
-                    }
+                    className="syllabus-my-annotations-stream-related-highlight-icon"
                     aria-hidden="true"
-                  >
-                    A
-                  </span>
+                  />
                 ) : (
                   <span
                     className="icon icon-css icon-item-type syllabus-my-annotations-stream-related-type-icon"
@@ -787,7 +783,40 @@ function AnnotationRelatedItems({
                   />
                 )}
                 <span className="syllabus-my-annotations-stream-related-label">
-                  {item.title}
+                  <span className="syllabus-my-annotations-stream-related-snippet">
+                    {item.quoted ? (
+                      <mark
+                        className="syllabus-magazine-highlight-mark"
+                        style={
+                          {
+                            "--highlight-color": highlightColor,
+                          } as JSX.CSSProperties
+                        }
+                      >
+                        {item.title}
+                      </mark>
+                    ) : (
+                      item.title
+                    )}
+                  </span>
+                  {item.parentTitle ? (
+                    <>
+                      <span
+                        className="syllabus-my-annotations-stream-related-sep"
+                        aria-hidden="true"
+                      >
+                        ·
+                      </span>
+                      <span
+                        className="icon icon-css icon-item-type syllabus-my-annotations-stream-related-type-icon"
+                        data-item-type={item.parentItemType || "document"}
+                        aria-hidden="true"
+                      />
+                      <span className="syllabus-my-annotations-stream-related-parent">
+                        {item.parentTitle}
+                      </span>
+                    </>
+                  ) : null}
                 </span>
               </button>
             </li>

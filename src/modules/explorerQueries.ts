@@ -44,7 +44,17 @@ export type MyAnnotationStreamKind = "annotation" | "fulltext";
 /** Related item shown under an annotation comment (`dc:relation`). */
 export type MyAnnotationRelatedItem = {
   id: number;
+  /** Annotation quote (else comment), or related item title. */
   title: string;
+  /** True when `title` is highlight quote text (show marks + highlight). */
+  quoted?: boolean;
+  /**
+   * Bibliographic parent work when `itemType === "annotation"`
+   * (not the attachment).
+   */
+  parentTitle?: string;
+  /** Parent work `itemType` for the type icon beside `parentTitle`. */
+  parentItemType?: string;
   /** Regular item type, or `"annotation"` for linked annotations. */
   itemType: string;
   /** Highlight colour when `itemType === "annotation"`. */
@@ -141,10 +151,29 @@ export function readAnnotationRelatedItems(item: {
       } catch {
         // Keep default.
       }
-      const title = getItemTitle(related) || quote || comment || related.key;
+      const parent = annotationParentItem(related);
+      const parentTitle = (parent && getItemTitle(parent)) || "";
+      let parentItemType = "";
+      if (parent) {
+        try {
+          parentItemType = String(parent.itemType || "document");
+        } catch {
+          parentItemType = "document";
+        }
+      }
+      // Quote first, then comment; parent work beside the label.
+      const title = quote || comment || parentTitle || related.key;
+      const showParent = !!(parentTitle && parentTitle !== title);
       out.push({
         id: related.id,
         title,
+        ...(quote ? { quoted: true } : {}),
+        ...(showParent
+          ? {
+              parentTitle,
+              parentItemType: parentItemType || "document",
+            }
+          : {}),
         itemType: "annotation",
         color,
       });
