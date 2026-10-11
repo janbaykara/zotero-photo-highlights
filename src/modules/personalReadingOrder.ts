@@ -700,6 +700,49 @@ async function persistNote(
   return note;
 }
 
+function normalizePersonalReadingOrderDocument(
+  document: PersonalReadingOrderDocument,
+  liveKeys?: Set<string>,
+): PersonalReadingOrderDocument {
+  const keys = liveKeys;
+  const description = normalizeDescription(document.description);
+  return {
+    version: PERSONAL_READING_ORDER_VERSION,
+    order: keys
+      ? prunePersonalReadingOrderKeys(document.order || [], keys)
+      : uniqueKeys(document.order || []),
+    done: keys
+      ? prunePersonalReadingOrderKeys(document.done || [], keys)
+      : uniqueKeys(document.done || []),
+    assignmentDone: uniqueKeys(document.assignmentDone || []),
+    classDone: uniqueKeys(document.classDone || []),
+    ...(description ? { description } : {}),
+  };
+}
+
+/**
+ * Synchronously update the in-memory PRO cache and notify listeners.
+ * Use before a slow note persist so checkbox / order UI paints immediately.
+ */
+export function patchPersonalReadingOrderOptimistic(
+  collection: Zotero.Collection | number,
+  mutator: (
+    document: PersonalReadingOrderDocument,
+  ) => PersonalReadingOrderDocument,
+): void {
+  const resolved = resolveCollection(collection);
+  if (!resolved) {
+    return;
+  }
+  const ref = collectionRefFromCollection(resolved);
+  const prev = orderCache.get(ref);
+  const next = normalizePersonalReadingOrderDocument(
+    mutator(cachedDocumentFor(resolved)),
+  );
+  setCacheEntry(ref, prev?.noteId ?? null, prev?.noteVersion ?? 0, next);
+  bumpGeneration();
+}
+
 async function mutatePersonalReadingOrderDocument(
   collection: Zotero.Collection,
   mutator: (
@@ -708,25 +751,15 @@ async function mutatePersonalReadingOrderDocument(
 ): Promise<PersonalReadingOrderDocument> {
   const ref = collectionRefFromCollection(collection);
   return orderWrites.enqueue(ref, async () => {
-    let document = cachedDocumentFor(collection);
     const liveKeys = liveKeysInCollection(collection);
-    document = {
-      ...document,
-      order: prunePersonalReadingOrderKeys(document.order || [], liveKeys),
-      done: prunePersonalReadingOrderKeys(document.done || [], liveKeys),
-      assignmentDone: uniqueKeys(document.assignmentDone || []),
-      classDone: uniqueKeys(document.classDone || []),
-    };
-    const next = mutator(document);
-    const description = normalizeDescription(next.description);
-    const pruned: PersonalReadingOrderDocument = {
-      version: PERSONAL_READING_ORDER_VERSION,
-      order: prunePersonalReadingOrderKeys(next.order || [], liveKeys),
-      done: prunePersonalReadingOrderKeys(next.done || [], liveKeys),
-      assignmentDone: uniqueKeys(next.assignmentDone || []),
-      classDone: uniqueKeys(next.classDone || []),
-      ...(description ? { description } : {}),
-    };
+    let document = normalizePersonalReadingOrderDocument(
+      cachedDocumentFor(collection),
+      liveKeys,
+    );
+    const pruned = normalizePersonalReadingOrderDocument(
+      mutator(document),
+      liveKeys,
+    );
 
     let note = findPersonalReadingOrderNoteUncached(collection);
     if (!note) {
@@ -738,6 +771,17 @@ async function mutatePersonalReadingOrderDocument(
     bumpGeneration();
     return pruned;
   });
+}
+
+/** Optimistic cache patch, then persist (same absolute mutator — idempotent). */
+async function mutatePersonalReadingOrderOptimistic(
+  collection: Zotero.Collection,
+  mutator: (
+    document: PersonalReadingOrderDocument,
+  ) => PersonalReadingOrderDocument,
+): Promise<PersonalReadingOrderDocument> {
+  patchPersonalReadingOrderOptimistic(collection, mutator);
+  return mutatePersonalReadingOrderDocument(collection, mutator);
 }
 
 export async function setPersonalReadingOrder(
@@ -820,9 +864,103 @@ export async function setPersonalReadingOrderDescription(
   return normalizeDescription(doc.description) || "";
 }
 
+function withItemReadingDone(
+  current: PersonalReadingOrderDocument,
+  itemKey: string,
+  done: boolean,
+  siblingAssignmentIds: string[],
+): PersonalReadingOrderDocument {
+  const doneKeys = new Set(current.done || []);
+  const assignmentDone = new Set(current.assignmentDone || []);
+  if (done) {
+    doneKeys.add(itemKey);
+    for (const id of siblingAssignmentIds) {
+      assignmentDone.delete(id);
+    }
+  } else {
+    doneKeys.delete(itemKey);
+    for (const id of siblingAssignmentIds) {
+      assignmentDone.delete(id);
+    }
+  }
+  return {
+    ...current,
+    version: PERSONAL_READING_ORDER_VERSION,
+    order: current.order || [],
+    done: [...doneKeys],
+    assignmentDone: [...assignmentDone],
+  };
+}
+
+function withAssignmentReadingDone(
+  current: PersonalReadingOrderDocument,
+  itemKey: string,
+  assignmentId: string,
+  done: boolean,
+  siblingAssignmentIds: string[],
+): PersonalReadingOrderDocument {
+  const siblings = uniqueKeys(siblingAssignmentIds);
+  const doneKeys = new Set(current.done || []);
+  const assignmentDone = new Set(current.assignmentDone || []);
+  const itemWasDone = doneKeys.has(itemKey);
+
+  if (done) {
+    assignmentDone.add(assignmentId);
+    const allDone = siblings.every(
+      (id) => id === assignmentId || assignmentDone.has(id),
+    );
+    if (allDone && siblings.length > 0) {
+      doneKeys.add(itemKey);
+      for (const id of siblings) {
+        assignmentDone.delete(id);
+      }
+    }
+  } else if (itemWasDone) {
+    doneKeys.delete(itemKey);
+    for (const id of siblings) {
+      if (id !== assignmentId) {
+        assignmentDone.add(id);
+      }
+    }
+    assignmentDone.delete(assignmentId);
+  } else {
+    assignmentDone.delete(assignmentId);
+  }
+
+  return {
+    ...current,
+    version: PERSONAL_READING_ORDER_VERSION,
+    order: current.order || [],
+    done: [...doneKeys],
+    assignmentDone: [...assignmentDone],
+  };
+}
+
+function withClassReadingDone(
+  current: PersonalReadingOrderDocument,
+  classId: string,
+  done: boolean,
+): PersonalReadingOrderDocument {
+  const classDone = new Set(current.classDone || []);
+  if (done) {
+    classDone.add(classId);
+  } else {
+    classDone.delete(classId);
+  }
+  return {
+    ...current,
+    version: PERSONAL_READING_ORDER_VERSION,
+    order: current.order || [],
+    done: current.done || [],
+    assignmentDone: current.assignmentDone || [],
+    classDone: [...classDone],
+  };
+}
+
 /**
  * Gallery / item-level done. When set, every assignment for the item reads as
  * done. `siblingAssignmentIds` are cleared from assignmentDone (redundant).
+ * Optimistic cache update, then background note persist.
  */
 export async function setItemReadingDone(
   collection: Zotero.Collection | number,
@@ -834,33 +972,15 @@ export async function setItemReadingDone(
   if (!resolved || !itemKey) {
     return;
   }
-  await mutatePersonalReadingOrderDocument(resolved, (current) => {
-    const doneKeys = new Set(current.done || []);
-    const assignmentDone = new Set(current.assignmentDone || []);
-    if (done) {
-      doneKeys.add(itemKey);
-      for (const id of siblingAssignmentIds) {
-        assignmentDone.delete(id);
-      }
-    } else {
-      doneKeys.delete(itemKey);
-      for (const id of siblingAssignmentIds) {
-        assignmentDone.delete(id);
-      }
-    }
-    return {
-      ...current,
-      version: PERSONAL_READING_ORDER_VERSION,
-      order: current.order || [],
-      done: [...doneKeys],
-      assignmentDone: [...assignmentDone],
-    };
-  });
+  const apply = (current: PersonalReadingOrderDocument) =>
+    withItemReadingDone(current, itemKey, done, siblingAssignmentIds);
+  await mutatePersonalReadingOrderOptimistic(resolved, apply);
 }
 
 /**
  * Syllabus assignment-level done. Does not force sibling assignments.
  * Unchecking while the item is item-done expands siblings into assignmentDone.
+ * Optimistic cache update, then background note persist.
  */
 export async function setAssignmentReadingDone(
   collection: Zotero.Collection | number,
@@ -873,47 +993,20 @@ export async function setAssignmentReadingDone(
   if (!resolved || !itemKey || !assignmentId) {
     return;
   }
-  const siblings = uniqueKeys(siblingAssignmentIds);
-  await mutatePersonalReadingOrderDocument(resolved, (current) => {
-    const doneKeys = new Set(current.done || []);
-    const assignmentDone = new Set(current.assignmentDone || []);
-    const itemWasDone = doneKeys.has(itemKey);
-
-    if (done) {
-      assignmentDone.add(assignmentId);
-      const allDone = siblings.every(
-        (id) => id === assignmentId || assignmentDone.has(id),
-      );
-      if (allDone && siblings.length > 0) {
-        doneKeys.add(itemKey);
-        for (const id of siblings) {
-          assignmentDone.delete(id);
-        }
-      }
-    } else if (itemWasDone) {
-      doneKeys.delete(itemKey);
-      for (const id of siblings) {
-        if (id !== assignmentId) {
-          assignmentDone.add(id);
-        }
-      }
-      assignmentDone.delete(assignmentId);
-    } else {
-      assignmentDone.delete(assignmentId);
-    }
-
-    return {
-      ...current,
-      version: PERSONAL_READING_ORDER_VERSION,
-      order: current.order || [],
-      done: [...doneKeys],
-      assignmentDone: [...assignmentDone],
-    };
-  });
+  const apply = (current: PersonalReadingOrderDocument) =>
+    withAssignmentReadingDone(
+      current,
+      itemKey,
+      assignmentId,
+      done,
+      siblingAssignmentIds,
+    );
+  await mutatePersonalReadingOrderOptimistic(resolved, apply);
 }
 
 /**
  * Class-level done. Stored on the personal note (not the syllabus document).
+ * Optimistic cache update, then background note persist.
  */
 export async function setClassReadingDone(
   collection: Zotero.Collection | number,
@@ -924,22 +1017,9 @@ export async function setClassReadingDone(
   if (!resolved || !classId) {
     return;
   }
-  await mutatePersonalReadingOrderDocument(resolved, (current) => {
-    const classDone = new Set(current.classDone || []);
-    if (done) {
-      classDone.add(classId);
-    } else {
-      classDone.delete(classId);
-    }
-    return {
-      ...current,
-      version: PERSONAL_READING_ORDER_VERSION,
-      order: current.order || [],
-      done: current.done || [],
-      assignmentDone: current.assignmentDone || [],
-      classDone: [...classDone],
-    };
-  });
+  const apply = (current: PersonalReadingOrderDocument) =>
+    withClassReadingDone(current, classId, done);
+  await mutatePersonalReadingOrderOptimistic(resolved, apply);
 }
 
 /** Drop class ids from classDone (e.g. after deleting a class). */

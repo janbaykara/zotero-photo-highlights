@@ -2354,6 +2354,7 @@ export class SyllabusManager {
    * Toggle or set reading done status on the Personal Reading Order note.
    * With `assignmentId` (Syllabus page): per-assignment. Without (Gallery):
    * item-level (covers all assignments for that item key).
+   * Optimistic PRO cache patch (UI paints immediately), then note persist.
    */
   static async setReadingStatus(
     item: Zotero.Item,
@@ -4343,8 +4344,8 @@ export class SyllabusManager {
 
   /**
    * Set class status for a specific collection and class number.
-   * Writes Personal Reading Order `classDone`, then refreshes the syllabus note
-   * envelope (folder ✅ / readable headings) and strips any legacy status.
+   * Optimistic PRO `classDone` patch (UI paints immediately), then note persist.
+   * Ensures the class record exists and strips any legacy syllabus `status`.
    */
   static async setClassStatus(
     collectionId: number | GetByLibraryAndKeyArgs,
@@ -4352,30 +4353,36 @@ export class SyllabusManager {
     status: ClassStatus,
     source: "page" | "item-pane",
   ): Promise<void> {
-    const classId = await SyllabusManager.ensureClass(
-      collectionId,
-      classNumber,
-    );
+    // Prefer sync id so the PRO optimistic patch runs before any note await.
+    let classId =
+      SyllabusManager.getClassIdByNumber(collectionId, classNumber) || "";
+    if (!classId) {
+      classId = await SyllabusManager.ensureClass(collectionId, classNumber);
+    }
     const collection =
       SyllabusManager.getCollectionFromIdentifier(collectionId);
-    if (collection) {
+    if (collection && classId) {
       await setClassReadingDone(collection, classId, status === "done");
     }
-    await mutateCollectionDocument(
-      collectionId,
-      (document) => {
-        const meta = document.classes?.[classId];
-        if (!meta || meta.status == null) {
-          return document;
-        }
-        const { status: _status, ...rest } = meta;
-        return {
-          ...document,
-          classes: { ...document.classes, [classId]: rest },
-        };
-      },
-      { createNote: source === "page" ? "prompt" : "always" },
-    );
+    const document = getCollectionDocument(collectionId);
+    const meta = classId ? document.classes?.[classId] : undefined;
+    if (meta?.status != null) {
+      await mutateCollectionDocument(
+        collectionId,
+        (doc) => {
+          const current = doc.classes?.[classId];
+          if (!current || current.status == null) {
+            return doc;
+          }
+          const { status: _status, ...rest } = current;
+          return {
+            ...doc,
+            classes: { ...doc.classes, [classId]: rest },
+          };
+        },
+        { createNote: source === "page" ? "prompt" : "always" },
+      );
+    }
     this.onClassListUpdate();
   }
 
