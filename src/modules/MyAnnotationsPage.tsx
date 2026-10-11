@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "preact/hooks";
+import { LoaderCircle } from "lucide-preact";
 import { twMerge } from "tailwind-merge";
 import { isZotero8OrLater } from "../utils/zotero";
 import { getString, getUiDir } from "../utils/locale";
@@ -93,16 +94,29 @@ function LoadPreviousButton({
 }) {
   return (
     <div className="syllabus-my-annotations-load-previous-wrap">
-      <button
-        type="button"
-        className="syllabus-my-annotations-load-previous"
-        disabled={loading}
-        onClick={onClick}
-      >
-        {loading
-          ? getString("my-annotations-load-previous-loading")
-          : getString("my-annotations-load-previous")}
-      </button>
+      {loading ? (
+        <div
+          className="syllabus-my-annotations-load-previous-status"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <LoaderCircle
+            size={14}
+            className="animate-spin shrink-0"
+            aria-hidden="true"
+          />
+          <span>{getString("my-annotations-load-previous-loading")}</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="syllabus-my-annotations-load-previous"
+          onClick={onClick}
+        >
+          {getString("my-annotations-load-previous")}
+        </button>
+      )}
     </div>
   );
 }
@@ -229,16 +243,6 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
     };
   }, []);
 
-  useEffect(() => {
-    const el = pageRef.current;
-    if (!el) {
-      return;
-    }
-    const onScroll = () => updatePinnedFromScroll();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [updatePinnedFromScroll]);
-
   const handleOrderChange = useCallback(
     (next: MyAnnotationsOrder) => {
       setOrder(next);
@@ -250,6 +254,9 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
   );
 
   const handleLoadPrevious = useCallback(async () => {
+    if (!hasMore || loading || loadingMore) {
+      return;
+    }
     const el = pageRef.current;
     if (el) {
       pendingScrollRef.current = {
@@ -260,7 +267,29 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
       skipNextPinTrackRef.current = true;
     }
     await loadPrevious();
-  }, [loadPrevious]);
+  }, [hasMore, loading, loadingMore, loadPrevious]);
+
+  /** Previous page sits at the top (newestLast) or bottom (newestFirst). */
+  const isNearPreviousEdge = useCallback(() => {
+    const el = pageRef.current;
+    if (!el) {
+      return false;
+    }
+    if (order === "newestLast") {
+      return el.scrollTop <= NEAR_EDGE_PX;
+    }
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    return distance <= NEAR_EDGE_PX;
+  }, [order]);
+
+  const maybeAutoloadPrevious = useCallback(() => {
+    if (!hasMore || loading || loadingMore) {
+      return;
+    }
+    if (isNearPreviousEdge()) {
+      void handleLoadPrevious();
+    }
+  }, [hasMore, loading, loadingMore, isNearPreviousEdge, handleLoadPrevious]);
 
   useLayoutEffect(() => {
     const el = pageRef.current;
@@ -277,6 +306,8 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
       pendingScrollRef.current = null;
       skipNextPinTrackRef.current = false;
       updatePinnedFromScroll();
+      // Still at the previous edge (short page / large filter) → keep filling.
+      maybeAutoloadPrevious();
       return;
     }
 
@@ -293,8 +324,29 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
       pendingScrollRef.current = null;
       skipNextPinTrackRef.current = false;
       pinnedToLiveRef.current = true;
+      // Short viewport: live edge coincides with previous → fill upward/back.
+      maybeAutoloadPrevious();
     }
-  }, [displayRows, order, loading, updatePinnedFromScroll]);
+  }, [
+    displayRows,
+    order,
+    loading,
+    updatePinnedFromScroll,
+    maybeAutoloadPrevious,
+  ]);
+
+  useEffect(() => {
+    const el = pageRef.current;
+    if (!el) {
+      return;
+    }
+    const onScroll = () => {
+      updatePinnedFromScroll();
+      maybeAutoloadPrevious();
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [updatePinnedFromScroll, maybeAutoloadPrevious]);
 
   const loadPreviousControl =
     hasMore && !loading ? (

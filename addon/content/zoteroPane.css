@@ -5161,13 +5161,19 @@ button.syllabus-explorer-class-segment-header:focus-visible {
   cursor: pointer;
 }
 
-.syllabus-my-annotations-load-previous:disabled {
-  opacity: 0.6;
-  cursor: default;
+.syllabus-my-annotations-load-previous:hover {
+  background: color-mix(in srgb, var(--fill-secondary, #888) 12%, transparent);
 }
 
-.syllabus-my-annotations-load-previous:not(:disabled):hover {
-  background: color-mix(in srgb, var(--fill-secondary, #888) 12%, transparent);
+.syllabus-my-annotations-load-previous-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.8rem;
+  color: var(--fill-secondary, #888);
+  pointer-events: none;
+  user-select: none;
 }
 
 .syllabus-my-annotations-body.is-grid-body {
