@@ -4,6 +4,8 @@
  * Conventions:
  * - External truth (Zotero pane, prefs, syllabus note cache) → atomFromExternal /
  *   atomFamilyFromExternal with onMount subscribe + equality-aware set.
+ * - Prefer entity-keyed atoms for Zotero state (item / collection / class / …)
+ *   over generation counters at call sites — see AGENTS.md and TECHNICAL.md.
  * - Plugin UI truth (syllabus identifiers, …) → plain atom; write with
  *   useSetAtom / getDefaultStore().set — never useState + sync effect.
  * - Never wrap renderComponent roots in <Provider>; default store is shared

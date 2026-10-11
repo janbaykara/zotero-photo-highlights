@@ -32,6 +32,7 @@ import { readingContentWidthClass } from "./galleryLayout";
 import type { MagazinePacking } from "./magazinePacking";
 import { ReadingItemsLayout } from "./readingItemsLayout";
 import { useScheduleStickyTop } from "./scheduleSticky";
+import { useClassReadingDone } from "./react-zotero-sync/personalReadingOrder";
 
 export type ClassReading = {
   collectionId: number;
@@ -264,21 +265,20 @@ export function ClassReadingBlock({
   onItemClick?: (item: Zotero.Item) => void;
 }) {
   const stickyTop = useScheduleStickyTop("class");
-  const { singularCapitalized } = SyllabusManager.getNomenclatureFormatted(
-    classReading.collectionId,
-  );
-  const classStatus = SyllabusManager.getClassStatus(
+  const classIsDone = useClassReadingDone(
     classReading.collectionId,
     classReading.classNumber,
+  );
+  const { singularCapitalized } = SyllabusManager.getNomenclatureFormatted(
+    classReading.collectionId,
   );
 
   const handleClassStatusToggle = async () => {
     try {
-      const newStatus = classStatus === "done" ? null : "done";
       await SyllabusManager.setClassStatus(
         classReading.collectionId,
         classReading.classNumber,
-        newStatus,
+        classIsDone ? null : "done",
         "page",
       );
     } catch (error) {
@@ -287,7 +287,7 @@ export function ClassReadingBlock({
   };
 
   return (
-    <div className={twMerge(classStatus === "done" ? "opacity-40" : "")}>
+    <div className={twMerge(classIsDone ? "opacity-40" : "")}>
       <div
         className={twMerge(
           stickyHeading
@@ -308,28 +308,24 @@ export function ClassReadingBlock({
         >
           <input
             type="checkbox"
-            checked={classStatus === "done"}
+            checked={classIsDone}
             onChange={handleClassStatusToggle}
             className={twMerge(
               "absolute right-full mr-1 w-4 h-4 cursor-pointer shrink-0 self-center in-[.print]:hidden accent-accent-green!",
               isZotero8OrLater() ? "md:mr-2!" : "mr-2!",
             )}
             title={
-              classStatus === "done"
-                ? getString("mark-not-done")
-                : getString("mark-done")
+              classIsDone ? getString("mark-not-done") : getString("mark-done")
             }
             aria-label={
-              classStatus === "done"
-                ? getString("mark-not-done")
-                : getString("mark-done")
+              classIsDone ? getString("mark-not-done") : getString("mark-done")
             }
           />
           <div
             className={twMerge(
               "flex-1 syllabus-class-reading-heading",
               showCollectionLink || compactHeading ? "text-xl" : "text-3xl",
-              classStatus === "done" ? "line-through" : "",
+              classIsDone ? "line-through" : "",
               onCollectionClick
                 ? "hover:cursor-pointer hover:bg-quinary active:bg-quarternary rounded-md px-1 -mx-1 inline-block"
                 : "inline-block px-1 -mx-1",

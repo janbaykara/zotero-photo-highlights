@@ -1,13 +1,8 @@
 import { useMemo } from "preact/hooks";
 import { compareLocale } from "../utils/locale";
+import { PLUGIN_MANAGED_COLLECTION_NOTE_TAGS } from "../utils/pluginManagedNotes";
 import { isGalleryNoteTag } from "./galleryNote";
-import {
-  INTENTION_NOTE_TAG,
-  PINNED_COLLECTION_TAG,
-  PINNED_TAG,
-} from "./pinned";
-import { PERSONAL_READING_ORDER_NOTE_TAG } from "./personalReadingOrder";
-import { SYLLABUS_NOTE_TAG } from "./syllabusNote";
+import { INTENTION_NOTE_TAG, PINNED_TAG } from "./pinned";
 
 export type TagGroup = {
   tag: string;
@@ -15,12 +10,10 @@ export type TagGroup = {
 };
 
 /** Exact plugin-owned tags that must never appear as group-by buckets. */
-const PLUGIN_OWNED_TAGS = new Set([
-  SYLLABUS_NOTE_TAG,
-  PERSONAL_READING_ORDER_NOTE_TAG,
+const PLUGIN_OWNED_TAGS = new Set<string>([
+  ...PLUGIN_MANAGED_COLLECTION_NOTE_TAGS,
   PINNED_TAG,
   INTENTION_NOTE_TAG,
-  PINNED_COLLECTION_TAG,
 ]);
 
 /** Zotero automatic tags (keywords / subject headings) use type 1. */

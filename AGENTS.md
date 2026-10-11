@@ -35,7 +35,9 @@ Use **pnpm** only (`pnpm-lock.yaml`). CI runs `pnpm run lint:check` with a fresh
 
 ## Shared UI / Zotero state (Jotai)
 
-Cross-root and cross-view live state uses Jotai’s **default store** (no `<Provider>` on Preact roots). External mirrors (selection, prefs, syllabus notes) go through `atomFromExternal` / `atomFamilyFromExternal` in `src/modules/react-zotero-sync/jotaiExternal.ts` (`atomFamily` from `jotai-family`, not `jotai/utils`). Plugin-owned UI (e.g. syllabus assignment selection) uses plain atoms — write with `useSetAtom` / `getDefaultStore().set`, never `useState` + a sync effect. Details: [doc/TECHNICAL.md](doc/TECHNICAL.md#shared-data-layer-jotai).
+Cross-root and cross-view live state uses Jotai’s **default store** (no `<Provider>` on Preact roots). External mirrors (selection, prefs, syllabus notes) go through `atomFromExternal` / `atomFamilyFromExternal` in `src/modules/react-zotero-sync/jotaiExternal.ts` (`atomFamily` from `jotai-family`, not `jotai/utils`). Plugin-owned UI (e.g. syllabus assignment selection) uses plain atoms — write with `useSetAtom` / `getDefaultStore().set`, never `useState` + a sync effect.
+
+**Prefer a Jotai atom for Zotero entity state.** When UI depends on a concrete fact about an item, collection, class, pin, etc. (e.g. “is this class done?”), expose it as an `atomFamilyFromExternal` (or plain atom) + hook that returns that value — not `void someGeneration` plus an imperative `getX()` read. Generation counters are fine as the underlying bus that atoms subscribe to; call sites should consume the entity atom. Example: [`useClassReadingDone`](src/modules/react-zotero-sync/personalReadingOrder.ts). Details: [doc/TECHNICAL.md](doc/TECHNICAL.md#shared-data-layer-jotai).
 
 ## Zotero Dev MCP
 

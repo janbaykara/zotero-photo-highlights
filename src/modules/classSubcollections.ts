@@ -192,6 +192,7 @@ export function classFolderNameMatches(
   meta: StoredClassMetadata,
   collectionName: string,
   classNumber?: number,
+  done?: boolean,
 ): boolean {
   const number = classNumber ?? meta.number;
   if (!number) {
@@ -206,7 +207,10 @@ export function classFolderNameMatches(
     document.nomenclature,
     number,
     meta.title,
-    { done: meta.status === "done", readingDate: meta.readingDate },
+    {
+      done: done ?? meta.status === "done",
+      readingDate: meta.readingDate,
+    },
   );
   const strippedDone = collectionName.replace(/\s*✅\s*$/u, "").trimEnd();
   const base = classSubcollectionNameBase(collectionName);
@@ -252,6 +256,7 @@ export function getManagedParentCollectionId(
 export function rememberManagedSubcollections(
   parent: Zotero.Collection,
   document: CollectionSyllabusDocument,
+  doneClassIds?: ReadonlySet<string> | null,
 ): void {
   for (const meta of Object.values(document.classes || {})) {
     const key = trimKey(meta?.subcollectionKey);
@@ -268,8 +273,19 @@ export function rememberManagedSubcollections(
       if (managedByCollectionId.has(child.id) || child.deleted) {
         continue;
       }
-      for (const meta of Object.values(document.classes || {})) {
-        if (classFolderNameMatches(document, meta, child.name)) {
+      for (const [classId, meta] of Object.entries(document.classes || {})) {
+        if (!meta) {
+          continue;
+        }
+        if (
+          classFolderNameMatches(
+            document,
+            meta,
+            child.name,
+            undefined,
+            doneClassIds?.has(classId) || meta.status === "done",
+          )
+        ) {
           rememberManaged(child, parent);
           break;
         }
@@ -452,6 +468,7 @@ export async function ensureClassSubcollections(
   parent: Zotero.Collection,
   next: CollectionSyllabusDocument,
   previous: CollectionSyllabusDocument,
+  doneClassIds?: ReadonlySet<string> | null,
 ): Promise<CollectionSyllabusDocument> {
   if (!collectionLibraryIsEditable(parent)) {
     return next;
@@ -502,7 +519,10 @@ export async function ensureClassSubcollections(
         next.nomenclature,
         classNumber,
         meta.title,
-        { done: meta.status === "done", readingDate: meta.readingDate },
+        {
+          done: doneClassIds?.has(classId) || meta.status === "done",
+          readingDate: meta.readingDate,
+        },
       );
       try {
         const child = await ensureChildForClass(parent, meta, name, usedKeys);

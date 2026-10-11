@@ -2,8 +2,8 @@ import { getSelectedCollection } from "../utils/zotero";
 import { getPref } from "../utils/prefs";
 import { getReadingTimeSync, formatReadingTime } from "../utils/readingTime";
 import { getString } from "../utils/locale";
+import { isPluginManagedCollectionNote } from "../utils/pluginManagedNotes";
 import { SyllabusManager } from "./syllabus";
-import { SYLLABUS_NOTE_TAG } from "./syllabusNote";
 import {
   getPersonalReadingOrderKeys,
   subscribePersonalReadingOrderChanges,
@@ -222,16 +222,6 @@ export async function registerPersonalReadingOrderColumn() {
   }
 }
 
-function isStandaloneSyllabusNote(item: Zotero.Item): boolean {
-  try {
-    return (
-      item.isNote() && item.isTopLevelItem() && item.hasTag(SYLLABUS_NOTE_TAG)
-    );
-  } catch {
-    return false;
-  }
-}
-
 function appendSyllabusInfoParts(
   doc: Document,
   container: HTMLElement,
@@ -284,7 +274,7 @@ export async function registerSyllabusPriorityColumn() {
     label: getString("column-syllabus-priority"),
     hidden: true,
     dataProvider: (item: Zotero.Item, dataKey: string) => {
-      if (isStandaloneSyllabusNote(item)) {
+      if (isPluginManagedCollectionNote(item)) {
         return "";
       }
 
@@ -347,7 +337,7 @@ export async function registerSyllabusInfoColumn() {
     dataKey: field,
     label: getString("column-syllabus-info"),
     dataProvider: (item: Zotero.Item, dataKey: string) => {
-      if (isStandaloneSyllabusNote(item)) {
+      if (isPluginManagedCollectionNote(item)) {
         return "";
       }
 

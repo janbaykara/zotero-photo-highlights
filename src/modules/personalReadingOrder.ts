@@ -1,7 +1,7 @@
 /**
  * Collection-scoped Personal Reading Order: a hidden top-level note that stores
- * the user’s preferred flat reading sequence and per-item reading done state.
- * Distinct from the Syllabus note (no personal progress there).
+ * the user’s preferred flat reading sequence and personal progress (item /
+ * assignment / class done). Distinct from the Syllabus note (structure only).
  *
  * Envelope: human-readable numbered list, then “Plugin data (do not edit)” + JSON.
  * Unordered items are not stored in `order` — they follow ordered keys at display
@@ -11,17 +11,17 @@
 import * as z from "zod";
 import { getCachedCollectionById, getCachedItem } from "../utils/cache";
 import { getItemTitle, readItemNote } from "../utils/items";
+import { PERSONAL_READING_ORDER_NOTE_TAG } from "../utils/pluginManagedNotes";
 import { createReentrantSerialQueue } from "../utils/serialQueue";
 import { getAllCollections } from "../utils/zotero";
 import { PLUGIN_JSON_HEADING, PLUGIN_REPO_URL } from "./syllabusNoteHtml";
+
+export { PERSONAL_READING_ORDER_NOTE_TAG } from "../utils/pluginManagedNotes";
 
 /** Legacy note title; recognition also accepts titles that start with this. */
 export const PERSONAL_READING_ORDER_NOTE_TITLE = "Personal Reading Order";
 /** Prefix for the human-readable note H1 (Zotero’s note title). */
 export const PERSONAL_READING_ORDER_DOCUMENT_PREFIX = "Personal reading order";
-/** Stored identifier — do not localize. */
-export const PERSONAL_READING_ORDER_NOTE_TAG =
-  "zotero-syllabus-personal-reading-order";
 /** Stored identifier — do not localize. */
 export const PERSONAL_READING_ORDER_PRE_ATTR =
   "data-zotero-syllabus-personal-reading-order";
@@ -60,6 +60,11 @@ export const PersonalReadingOrderDocumentSchema = z.object({
    * Independent per assignment unless the item is also in `done`.
    */
   assignmentDone: z.array(z.string()).default([]),
+  /**
+   * Syllabus class ids marked done (class-level checkbox). Personal progress —
+   * not stored on the shared syllabus document.
+   */
+  classDone: z.array(z.string()).default([]),
   /**
    * Optional gallery / reading-list blurb shown under the Gallery title and on
    * published gallery pages. Distinct from syllabus collection description.
@@ -107,6 +112,7 @@ function emptyDocument(): PersonalReadingOrderDocument {
     order: [],
     done: [],
     assignmentDone: [],
+    classDone: [],
   };
 }
 
@@ -359,6 +365,7 @@ export function serializePersonalReadingOrderNote(
     order,
     done: document.done || [],
     assignmentDone: document.assignmentDone || [],
+    classDone: document.classDone || [],
   };
   if (description) {
     payload.description = description;
@@ -576,16 +583,18 @@ export function remapPersonalReadingOrderKeys(
   };
   const order = remapList(document.order || []);
   const done = remapList(document.done || []);
-  // assignmentDone ids are stable across item merges.
+  // assignmentDone / classDone ids are stable across item merges.
   const assignmentDone = uniqueKeys(document.assignmentDone || []);
+  const classDone = uniqueKeys(document.classDone || []);
   if (
     order.join("\0") === (document.order || []).join("\0") &&
     done.join("\0") === (document.done || []).join("\0") &&
-    assignmentDone.join("\0") === (document.assignmentDone || []).join("\0")
+    assignmentDone.join("\0") === (document.assignmentDone || []).join("\0") &&
+    classDone.join("\0") === (document.classDone || []).join("\0")
   ) {
     return document;
   }
-  return { ...document, order, done, assignmentDone };
+  return { ...document, order, done, assignmentDone, classDone };
 }
 
 /** Done item keys still present in the collection. */
@@ -641,6 +650,22 @@ export function isAssignmentReadingDone(
   return (doc.assignmentDone || []).includes(assignmentId);
 }
 
+/** Class-level done checkbox (syllabus class id). */
+export function isClassReadingDone(
+  collection: Zotero.Collection | number,
+  classId: string | undefined | null,
+): boolean {
+  if (!classId) {
+    return false;
+  }
+  const resolved = resolveCollection(collection);
+  if (!resolved) {
+    return false;
+  }
+  const doc = cachedDocumentFor(resolved);
+  return (doc.classDone || []).includes(classId);
+}
+
 async function persistNote(
   note: Zotero.Item,
   collection: Zotero.Collection,
@@ -690,6 +715,7 @@ async function mutatePersonalReadingOrderDocument(
       order: prunePersonalReadingOrderKeys(document.order || [], liveKeys),
       done: prunePersonalReadingOrderKeys(document.done || [], liveKeys),
       assignmentDone: uniqueKeys(document.assignmentDone || []),
+      classDone: uniqueKeys(document.classDone || []),
     };
     const next = mutator(document);
     const description = normalizeDescription(next.description);
@@ -698,6 +724,7 @@ async function mutatePersonalReadingOrderDocument(
       order: prunePersonalReadingOrderKeys(next.order || [], liveKeys),
       done: prunePersonalReadingOrderKeys(next.done || [], liveKeys),
       assignmentDone: uniqueKeys(next.assignmentDone || []),
+      classDone: uniqueKeys(next.classDone || []),
       ...(description ? { description } : {}),
     };
 
@@ -886,15 +913,73 @@ export async function setAssignmentReadingDone(
 }
 
 /**
- * Merge done keys / assignment ids into the personal note (e.g. migrate from
- * syllabus assignment.status).
+ * Class-level done. Stored on the personal note (not the syllabus document).
+ */
+export async function setClassReadingDone(
+  collection: Zotero.Collection | number,
+  classId: string,
+  done: boolean,
+): Promise<void> {
+  const resolved = resolveCollection(collection);
+  if (!resolved || !classId) {
+    return;
+  }
+  await mutatePersonalReadingOrderDocument(resolved, (current) => {
+    const classDone = new Set(current.classDone || []);
+    if (done) {
+      classDone.add(classId);
+    } else {
+      classDone.delete(classId);
+    }
+    return {
+      ...current,
+      version: PERSONAL_READING_ORDER_VERSION,
+      order: current.order || [],
+      done: current.done || [],
+      assignmentDone: current.assignmentDone || [],
+      classDone: [...classDone],
+    };
+  });
+}
+
+/** Drop class ids from classDone (e.g. after deleting a class). */
+export async function removeClassReadingDone(
+  collection: Zotero.Collection | number,
+  classIds: string[],
+): Promise<void> {
+  const ids = uniqueKeys(classIds);
+  if (!ids.length) {
+    return;
+  }
+  const resolved = resolveCollection(collection);
+  if (!resolved) {
+    return;
+  }
+  await mutatePersonalReadingOrderDocument(resolved, (current) => {
+    const drop = new Set(ids);
+    const classDone = (current.classDone || []).filter((id) => !drop.has(id));
+    if (classDone.length === (current.classDone || []).length) {
+      return current;
+    }
+    return {
+      ...current,
+      version: PERSONAL_READING_ORDER_VERSION,
+      classDone,
+    };
+  });
+}
+
+/**
+ * Merge done keys / assignment ids / class ids into the personal note
+ * (e.g. migrate from syllabus assignment.status / class.status).
  */
 export async function mergePersonalReadingDoneKeys(
   collection: Zotero.Collection | number,
   itemKeys: string[],
   assignmentIds: string[] = [],
+  classIds: string[] = [],
 ): Promise<void> {
-  if (!itemKeys.length && !assignmentIds.length) {
+  if (!itemKeys.length && !assignmentIds.length && !classIds.length) {
     return;
   }
   const resolved = resolveCollection(collection);
@@ -904,6 +989,7 @@ export async function mergePersonalReadingDoneKeys(
   await mutatePersonalReadingOrderDocument(resolved, (current) => {
     const done = new Set(current.done || []);
     const assignmentDone = new Set(current.assignmentDone || []);
+    const classDone = new Set(current.classDone || []);
     for (const key of itemKeys) {
       if (key) {
         done.add(key);
@@ -914,12 +1000,18 @@ export async function mergePersonalReadingDoneKeys(
         assignmentDone.add(id);
       }
     }
+    for (const id of classIds) {
+      if (id) {
+        classDone.add(id);
+      }
+    }
     return {
       ...current,
       version: PERSONAL_READING_ORDER_VERSION,
       order: current.order || [],
       done: [...done],
       assignmentDone: [...assignmentDone],
+      classDone: [...classDone],
     };
   });
 }

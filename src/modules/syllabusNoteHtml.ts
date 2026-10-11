@@ -22,7 +22,7 @@ import { proseToHtml } from "../utils/prose";
 export const PLUGIN_JSON_HEADING = "Plugin data (do not edit)";
 export const PLUGIN_REPO_URL = "https://github.com/janbaykara/zotero-syllabus";
 /** Human-readable envelope. Independent of document.version. */
-export const READABLE_NOTE_FORMAT_VERSION = 4;
+export const READABLE_NOTE_FORMAT_VERSION = 5;
 export const READABLE_NOTE_ATTR = "data-readable";
 
 function escapeHtml(text: string): string {
@@ -502,10 +502,8 @@ async function renderReadableNoteBody(
             document.nomenclature,
             classNumber,
             classMeta.title,
-            {
-              done: classMeta.status === "done",
-              readingDate: classMeta.readingDate,
-            },
+            // Class done is personal (PRO); keep it off the shared readable note.
+            { readingDate: classMeta.readingDate },
           ),
         ),
         proseToHtml(classMeta.description),

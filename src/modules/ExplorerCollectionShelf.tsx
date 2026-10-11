@@ -55,7 +55,10 @@ import {
   type ExplorerCollectionShelf,
 } from "./explorerConfig";
 import { applyPersonalReadingOrder } from "./personalReadingOrder";
-import { usePersonalReadingOrderKeys } from "./react-zotero-sync/personalReadingOrder";
+import {
+  useClassReadingDone,
+  usePersonalReadingOrderKeys,
+} from "./react-zotero-sync/personalReadingOrder";
 import { isOptionalFeatureEnabled } from "./optionalFeatures";
 
 export type ExplorerShelfSegment = {
@@ -151,6 +154,8 @@ function ClassSegmentHeader({
   classMeta: SyllabusClassGroup["syllabusMetadata"];
   onOpen: () => void;
 }) {
+  const classIsDone = useClassReadingDone(collectionId, classNumber);
+
   if (classNumber == null) {
     return (
       <button
@@ -177,8 +182,6 @@ function ClassSegmentHeader({
   const className = `${singularCapitalized} ${classNumber}`;
   const title = (classMeta?.title || "").trim();
   const readingDate = classMeta?.readingDate;
-  const classIsDone =
-    SyllabusManager.getClassStatus(collectionId, classNumber) === "done";
 
   return (
     <button
@@ -214,6 +217,11 @@ function ClassSegmentHeader({
 }
 
 function SegmentHeader({ segment }: { segment: ExplorerShelfSegment }) {
+  const classIsDone = useClassReadingDone(
+    segment.collectionId,
+    segment.classNumber,
+  );
+  const done = classIsDone || Boolean(segment.done);
   const title = (
     <div className="syllabus-explorer-class-segment-title">
       <div className="syllabus-explorer-class-segment-title-inner">
@@ -235,7 +243,7 @@ function SegmentHeader({ segment }: { segment: ExplorerShelfSegment }) {
               {segment.label}
             </span>
           ) : null}
-          {segment.done ? (
+          {done ? (
             <span className="syllabus-explorer-class-segment-done">
               {getString("status-done")}
             </span>
@@ -306,58 +314,104 @@ export function ExplorerSegmentedCoverRail({
     <div className="syllabus-explorer-class-cover-rail">
       {segments.map((segment) => {
         const classHeader = classHeaders?.[segment.key];
-        const segmentCollectionId = segment.collectionId ?? collectionId;
-        const chromeByItemId = segment.itemAssignments
-          ? chromeByItemIdFromAssignments(
-              segmentCollectionId,
-              segment.itemAssignments,
-            )
-          : undefined;
         return (
-          <section
+          <ExplorerClassSegmentSection
             key={`${keyPrefix}-${segment.key}`}
-            className={twMerge(
-              "syllabus-explorer-class-segment",
-              segment.done ? "is-done" : null,
-            )}
-            data-explorer-class={segment.key}
-          >
-            {classHeader ? (
-              <ClassSegmentHeader {...classHeader} />
-            ) : (
-              <SegmentHeader segment={segment} />
-            )}
-            <div className="syllabus-explorer-class-segment-covers">
-              {segment.items.map((item) =>
-                magazine ? (
-                  <ExplorerCoverItem
-                    key={`${keyPrefix}-${segment.key}-${item.id}`}
-                    item={item}
-                    collectionId={segmentCollectionId}
-                    chrome={chromeByItemId?.get(item.id)}
-                    selected={selectedItemIds?.includes(item.id) || false}
-                    onClick={onClick}
-                    onDoubleClick={onDoubleClick}
-                    onContextMenu={onContextMenu}
-                  />
-                ) : (
-                  <GalleryTile
-                    key={`${keyPrefix}-${segment.key}-${item.id}`}
-                    item={item}
-                    collectionId={segmentCollectionId}
-                    selected={selectedItemIds?.includes(item.id) || false}
-                    chrome={chromeByItemId?.get(item.id)}
-                    onClick={onClick}
-                    onDoubleClick={onDoubleClick}
-                    onContextMenu={onContextMenu}
-                  />
-                ),
-              )}
-            </div>
-          </section>
+            keyPrefix={keyPrefix}
+            segment={segment}
+            classHeader={classHeader}
+            collectionId={collectionId}
+            magazine={magazine}
+            selectedItemIds={selectedItemIds}
+            onClick={onClick}
+            onDoubleClick={onDoubleClick}
+            onContextMenu={onContextMenu}
+          />
         );
       })}
     </div>
+  );
+}
+
+function ExplorerClassSegmentSection({
+  keyPrefix,
+  segment,
+  classHeader,
+  collectionId,
+  magazine,
+  selectedItemIds,
+  onClick,
+  onDoubleClick,
+  onContextMenu,
+}: {
+  keyPrefix: string;
+  segment: ExplorerShelfSegment;
+  classHeader?: {
+    collectionId: number;
+    classNumber: number | null;
+    classMeta: SyllabusClassGroup["syllabusMetadata"];
+    onOpen: () => void;
+  };
+  collectionId?: number;
+  magazine: boolean;
+  selectedItemIds?: number[] | null;
+  onClick: MagazineTileClick;
+  onDoubleClick: (item: Zotero.Item) => void;
+  onContextMenu: MagazineTileClick;
+}) {
+  const segmentCollectionId = segment.collectionId ?? collectionId;
+  const classIsDone = useClassReadingDone(
+    segmentCollectionId,
+    segment.classNumber,
+  );
+  const done = classIsDone || Boolean(segment.done);
+  const chromeByItemId = segment.itemAssignments
+    ? chromeByItemIdFromAssignments(
+        segmentCollectionId ?? 0,
+        segment.itemAssignments,
+      )
+    : undefined;
+  return (
+    <section
+      className={twMerge(
+        "syllabus-explorer-class-segment",
+        done ? "is-done" : null,
+      )}
+      data-explorer-class={segment.key}
+    >
+      {classHeader ? (
+        <ClassSegmentHeader {...classHeader} />
+      ) : (
+        <SegmentHeader segment={segment} />
+      )}
+      <div className="syllabus-explorer-class-segment-covers">
+        {segment.items.map((item) =>
+          magazine ? (
+            <ExplorerCoverItem
+              key={`${keyPrefix}-${segment.key}-${item.id}`}
+              item={item}
+              collectionId={segmentCollectionId}
+              chrome={chromeByItemId?.get(item.id)}
+              selected={selectedItemIds?.includes(item.id) || false}
+              onClick={onClick}
+              onDoubleClick={onDoubleClick}
+              onContextMenu={onContextMenu}
+            />
+          ) : (
+            <GalleryTile
+              key={`${keyPrefix}-${segment.key}-${item.id}`}
+              item={item}
+              collectionId={segmentCollectionId}
+              selected={selectedItemIds?.includes(item.id) || false}
+              chrome={chromeByItemId?.get(item.id)}
+              onClick={onClick}
+              onDoubleClick={onDoubleClick}
+              onContextMenu={onContextMenu}
+            />
+          ),
+        )}
+      </div>
+    </section>
   );
 }
 

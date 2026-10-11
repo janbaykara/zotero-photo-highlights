@@ -27,7 +27,7 @@ Each syllabus collection has a top-level note tagged `zotero-syllabus` (title `S
 
 The note HTML is roughly:
 
-1. Human-readable prose: H1 `Syllabus document - {collection name}` (Zotero’s note title), course line, class headings, citations — no done/todo checkboxes; status lives in the JSON and the Syllabus UI.
+1. Human-readable prose: H1 `Syllabus document - {collection name}` (Zotero’s note title), course line, class headings (dates only — no class ✅), citations — no done/todo checkboxes; personal progress lives in the Personal Reading Order note and the Syllabus UI.
 2. A “Plugin data (do not edit)” heading.
 3. A `<pre data-zotero-syllabus="1">` block with the JSON document.
 
@@ -48,16 +48,17 @@ Distinct from the Syllabus note: a hidden top-level collection note (title `Pers
 Envelope (human then machine), in [`src/modules/personalReadingOrder.ts`](../src/modules/personalReadingOrder.ts):
 
 1. Numbered list of current titles for keys in `order` (✅ when item-level done); optional Done section for done keys not in `order`.
-2. “Plugin data (do not edit)” + `<pre data-zotero-syllabus-personal-reading-order="1">` JSON `{ version: 1, order: string[], done: string[], assignmentDone: string[], description?: string }`.
+2. “Plugin data (do not edit)” + `<pre data-zotero-syllabus-personal-reading-order="1">` JSON `{ version: 1, order: string[], done: string[], assignmentDone: string[], classDone: string[], description?: string }`.
 
 Optional **`description`** is the Gallery reading-list blurb (placeholder “Add a description…” under the Gallery title). It is distinct from the Syllabus note’s collection description. Gallery publish / export include it on the public page header the same way syllabus shares use the syllabus description. When a collection is first turned into a syllabus (`ensureSyllabusNoteForUser` / new note), an existing Gallery description is copied onto the new Syllabus note if that note has no description yet.
 
-Unordered items are **not** stored in `order`; they follow the ordered keys at display time. Personal progress lives here, not on syllabus assignments:
+Unordered items are **not** stored in `order`; they follow the ordered keys at display time. Personal progress lives here, not on the shared syllabus document:
 
 - **`done`** — item keys (Gallery / flat checkbox). Checking an item marks every syllabus assignment for that key done.
 - **`assignmentDone`** — assignment ids (Syllabus page). Checking one assignment leaves siblings unchecked until all are done (then promoted to `done`).
+- **`classDone`** — syllabus class ids (class-level checkbox). Drives class-folder `✅` suffixes only (not the shared readable syllabus note).
 
-The note is created lazily on first mutation. Startup migrates legacy `assignment.status === "done"` into these fields and strips status from the Syllabus note.
+The note is created lazily on first mutation. Startup migrates legacy `assignment.status` / `classes[].status === "done"` into these fields and strips status from the Syllabus note.
 
 **Show checkboxes** is a collection-scoped view pref (`readerModes.<collectionId>`), shared by Syllabus and Gallery. Gallery’s settings menu exposes the same toggle.
 
@@ -139,7 +140,7 @@ Class-folder Syllabus view is a single-class page (same class renderer as the Re
 
 ## Class notes
 
-Standalone notes in a syllabus collection can be assigned like readings (`document.items[noteKey]`). On the Syllabus tab they use the same cards and manual order as other class items, with a permanent yellow **Class Note** label instead of a configurable priority. Notes with no class assignment sit in the unnumbered top group alongside priority-only items (for example Course Information). In Preview / Cover browse layouts (Syllabus and Gallery) they use the notepad cover with note HTML in the blurb column. Creation uses `createAndAssignClassNote` (`src/modules/classNote.ts`); opening is `ZoteroPane.selectItem` / double-click `openNote` so the native note editor is the editor. Membership helpers: `isClassNoteItem` / `isAssignedClassNote` in `src/utils/items.ts` (excludes the collection Syllabus document tagged `zotero-syllabus` and pin-only collection marker notes tagged `zotero-syllabus-pinned-collection`). Class notes stay off Reading Schedule, Annotation Feed, class folders, print, and publish.
+Standalone notes in a syllabus collection can be assigned like readings (`document.items[noteKey]`). On the Syllabus tab they use the same cards and manual order as other class items, with a permanent yellow **Class Note** label instead of a configurable priority. Notes with no class assignment sit in the unnumbered top group alongside priority-only items (for example Course Information). In Preview / Cover browse layouts (Syllabus and Gallery) they use the notepad cover with note HTML in the blurb column. Creation uses `createAndAssignClassNote` (`src/modules/classNote.ts`); opening is `ZoteroPane.selectItem` / double-click `openNote` so the native note editor is the editor. Membership helpers: `isClassNoteItem` / `isAssignedClassNote` in [`src/utils/items.ts`](../src/utils/items.ts). Those exclude **plugin-managed collection notes** via [`isPluginManagedCollectionNote`](../src/utils/pluginManagedNotes.ts) (syllabus document `zotero-syllabus`, personal reading order `zotero-syllabus-personal-reading-order`, pin-only marker `zotero-syllabus-pinned-collection`) — use that helper anywhere those notes must stay hidden (item columns, lists, publish). Class notes stay off Reading Schedule, Annotation Feed, class folders, print, and publish.
 
 ## Pinned (Reading Schedule)
 
@@ -178,8 +179,9 @@ Collection-scoped notes on regular items for Gallery / card views. Each note is 
 
 Preact roots (Syllabus, ItemPane, Gallery, Explorer, tabs) share one Jotai **default store**. Do not wrap `renderComponent` trees in `<Provider>` — that isolates roots.
 
-- **External truth** (Zotero selection, prefs, syllabus notes, explorer queries, pinned shelf, subcollection trees) → [`atomFromExternal` / `atomFamilyFromExternal`](../src/modules/react-zotero-sync/jotaiExternal.ts) with `onMount` subscribe (`atomFamily` from [`jotai-family`](https://github.com/jotaijs/jotai-family), not `jotai/utils`). Coerced string prefs use [`createCoercedPrefHooks`](../src/modules/react-zotero-sync/coercedPref.ts).
+- **External truth** (Zotero selection, prefs, syllabus notes, explorer queries, pinned shelf, subcollection trees, personal reading order) → [`atomFromExternal` / `atomFamilyFromExternal`](../src/modules/react-zotero-sync/jotaiExternal.ts) with `onMount` subscribe (`atomFamily` from [`jotai-family`](https://github.com/jotaijs/jotai-family), not `jotai/utils`). Coerced string prefs use [`createCoercedPrefHooks`](../src/modules/react-zotero-sync/coercedPref.ts).
 - **Plugin UI truth** (syllabus assignment identifiers, …) → plain `atom`; set via hooks / `getDefaultStore()`.
+- **Entity state as atoms (preferred).** Where possible, represent Zotero entity state with a Jotai atom (usually `atomFamilyFromExternal` keyed by item id, collection id, class number, …) and a hook that returns that value. Examples: [`useClassReadingDone`](../src/modules/react-zotero-sync/personalReadingOrder.ts), [`useIsPinnedItem`](../src/modules/react-zotero-sync/pinned.ts). Do **not** have components `void usePersonalReadingOrderGeneration()` (or similar) and then call an imperative getter — that over-invalidates and hides the dependency. Generation counters / domain buses remain fine **inside** atom `subscribe` callbacks; UI call sites should read the entity atom.
 - Do **not** add new `useSyncExternalStore` / `useState`+Notifier mirrors in components — wrap Notifier/Prefs in the helpers above.
 - Pref observers: [`subscribePref` / `subscribePrefs`](../src/utils/prefSubscribe.ts) or [`subscribePluginPref`](../src/utils/prefs.ts) — do not call `Zotero.Prefs.registerObserver` directly.
 - Public hooks stay the call-site API; Notifier/`subscribe*` wiring lives inside atom `subscribe` callbacks (or domain buses like `syllabusNote` / `pinned` that those callbacks attach to).

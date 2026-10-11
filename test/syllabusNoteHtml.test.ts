@@ -63,11 +63,10 @@ function sampleDocument() {
 }
 
 describe("syllabus note readable HTML", function () {
-  it("renders folder-matching class headings, progress marks, priority groups, and links", async function () {
+  it("renders folder-matching class headings, priority groups, and links", async function () {
     const document = sampleDocument();
     const html = await serializeSyllabusNote(document);
     const heading = classSubcollectionName("week", 1, "Intro", {
-      done: true,
       readingDate: "2026-08-28",
     });
 
@@ -78,13 +77,13 @@ describe("syllabus note readable HTML", function () {
     );
     assert.include(html, `<h1>${syllabusNoteDocumentHeading(null)}</h1>`);
     assert.include(html, `<h3>${heading}</h3>`);
+    assert.notInclude(html, "✅");
     assert.notInclude(html, " - done</p>");
     assert.include(html, "<strong>Essential</strong>");
     assert.include(html, "<strong>Optional</strong>");
     assert.include(html, "First Book — Read pp. 1-20");
     assert.include(html, "Second Article");
     assert.notInclude(html, "☐");
-    assert.notInclude(html, "✅ First Book");
     assert.include(html, `href="https://doi.org/10.1234/foo"`);
     assert.include(html, ">DOI</a>");
     assert.include(html, "You can stop reading here");

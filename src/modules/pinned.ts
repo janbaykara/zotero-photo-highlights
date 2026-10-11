@@ -37,9 +37,13 @@ import {
   applyPersonalReadingOrder,
   getPersonalReadingOrderKeys,
   isAssignmentReadingDone,
+  isClassReadingDone,
   isItemReadingDone,
 } from "./personalReadingOrder";
 import { isOptionalFeatureEnabled } from "./optionalFeatures";
+import { PINNED_COLLECTION_NOTE_TAG as PINNED_COLLECTION_TAG } from "../utils/pluginManagedNotes";
+
+export { PINNED_COLLECTION_NOTE_TAG as PINNED_COLLECTION_TAG } from "../utils/pluginManagedNotes";
 
 const pinnedListeners = new Set<() => void>();
 
@@ -239,12 +243,6 @@ export const PINNED_TAG = "pinned";
 
 /** Stored tag on optional intention child notes. Do not localize. */
 export const INTENTION_NOTE_TAG = "zotero-syllabus-pinned-intention";
-
-/**
- * Marker note tag for pinning a collection that has no Syllabus note.
- * Do not localize.
- */
-export const PINNED_COLLECTION_TAG = "zotero-syllabus-pinned-collection";
 
 /** Stored top-level Pinned folder name. Do not localize. */
 export const PINNED_FOLDER_NAME = "Pinned";
@@ -853,7 +851,10 @@ export function getSyllabusItemProgress(
   const doneClassNumbers = new Set<number>();
   for (let index = 0; index < classIds.length; index++) {
     const classId = classIds[index];
-    if (doc.classes?.[classId]?.status === "done") {
+    if (
+      isClassReadingDone(collection, classId) ||
+      doc.classes?.[classId]?.status === "done"
+    ) {
       doneClassNumbers.add(index + 1);
     }
   }
@@ -974,7 +975,9 @@ function collectClassDisplayEntries(
         ...entry,
         classNumber,
         classTitle: classMeta?.title || "",
-        classDone: classMeta?.status === "done",
+        classDone:
+          isClassReadingDone(collection, classId) ||
+          classMeta?.status === "done",
       });
     }
   }
@@ -1180,7 +1183,9 @@ function assignmentDoneForItem(
     const num = assignmentClassNumber(assignment, doc.classes, doc.classOrder);
     const classId = assignment.classId;
     const classDone = Boolean(
-      classId && doc.classes?.[classId]?.status === "done",
+      classId &&
+      (isClassReadingDone(collection, classId) ||
+        doc.classes?.[classId]?.status === "done"),
     );
     const isDone =
       classDone || isPinnedAssignmentDone(collection, itemKey, assignment);

@@ -13,7 +13,7 @@ description: Your own flat reading sequence for a collection, separate from clas
 
 ## Marking done
 
-Reading done status for this flow is tied to personal reading order (including migration from older assignment “done” flags where applicable). Marking the current **Next up** reading done advances the pin.
+Reading done status for this flow is tied to personal reading order: item checkboxes, per-assignment checkboxes on Syllabus, and **class-level** done (including migration from older flags on the Syllabus note). Marking the current **Next up** reading done advances the pin.
 
 ## How to use it
 

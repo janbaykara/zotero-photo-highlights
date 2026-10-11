@@ -2,12 +2,12 @@
 
 import { appendExportIdToExtra, SYLLABUS_EXPORT_ID_KEY } from "./identifiers";
 import { readItemNote } from "./items";
+import { SYLLABUS_NOTE_TAG } from "./pluginManagedNotes";
 
 const RIS_TRANSLATOR_ID = "32d59d2d-b65a-4da4-b0a3-bdd3cfb979e7";
 const BIBTEX_TRANSLATOR_ID = "9cb70025-a888-4a29-a210-93ec52da40d4";
 
 /** Stored identifiers — not UI copy (see AGENTS.md). */
-const SYLLABUS_NOTE_TAG = "zotero-syllabus";
 const SYLLABUS_NOTE_TITLE = "Syllabus";
 
 /** Keep short: a hung Translate.Export used to block publish for a full minute. */

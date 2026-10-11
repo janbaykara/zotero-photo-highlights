@@ -35,6 +35,7 @@ import {
   createAndAssignClassNote,
   createStandaloneClassNote,
 } from "./classNote";
+import { useClassReadingDone } from "./react-zotero-sync/personalReadingOrder";
 
 export type ItemDropIndicator = {
   classNumber: number | null;
@@ -162,9 +163,7 @@ export function ClassGroupComponent({
   const classTitle = classMeta?.title || "";
   const classDescription = classMeta?.description || "";
   const readingDate = classMeta?.readingDate;
-  const classIsDone = classNumber
-    ? SyllabusManager.getClassStatus(collectionId, classNumber) === "done"
-    : false;
+  const classIsDone = useClassReadingDone(collectionId, classNumber);
 
   // Check if there's a manual order for this class (including unnumbered)
   const hasManualOrder =

@@ -1,7 +1,16 @@
 import { getCachedItem } from "./cache";
 import { compareLocale } from "./locale";
 import { pageIndexForPrintedLabel, readPdfPageLabels } from "./pdfPageLabels";
+import { isPluginManagedCollectionNote } from "./pluginManagedNotes";
 import { itemBelongsInCollection } from "./zotero";
+
+export {
+  isPluginManagedCollectionNote,
+  PLUGIN_MANAGED_COLLECTION_NOTE_TAGS,
+  SYLLABUS_NOTE_TAG,
+  PERSONAL_READING_ORDER_NOTE_TAG,
+  PINNED_COLLECTION_NOTE_TAG,
+} from "./pluginManagedNotes";
 
 /**
  * Display title for any item type. `getField("title")` is empty for types that
@@ -227,28 +236,10 @@ export function isAssignedStandaloneAttachment(
   return isStandaloneAttachment(item) && assignedKeys.has(item.key);
 }
 
-/** Stored identifier on the collection Syllabus document note — not a class note. */
-const SYLLABUS_DOCUMENT_NOTE_TAG = "zotero-syllabus";
-
 /**
- * Marker note used only to pin a non-syllabus collection — not a class note.
- * Keep in sync with `PINNED_COLLECTION_TAG` in `src/modules/pinned.ts`.
- */
-const PINNED_COLLECTION_NOTE_TAG = "zotero-syllabus-pinned-collection";
-
-/**
- * Hidden personal reading-order note — not a class note.
- * Keep in sync with `PERSONAL_READING_ORDER_NOTE_TAG` in
- * `src/modules/personalReadingOrder.ts`.
- */
-const PERSONAL_READING_ORDER_NOTE_TAG =
-  "zotero-syllabus-personal-reading-order";
-
-/**
- * Top-level standalone note that can be assigned to a class. Excludes the
- * collection Syllabus document (`zotero-syllabus` tag), pin-only collection
- * marker notes (`zotero-syllabus-pinned-collection`), personal reading-order
- * notes, and child notes.
+ * Top-level standalone note that can be assigned to a class. Excludes
+ * {@link isPluginManagedCollectionNote} (syllabus document, personal reading
+ * order, pin-only collection marker) and child notes.
  */
 export function isClassNoteItem(
   item: Zotero.Item | false | null | undefined,
@@ -260,6 +251,9 @@ export function isClassNoteItem(
     if (item.deleted) {
       return false;
     }
+    if (isPluginManagedCollectionNote(item)) {
+      return false;
+    }
     if (typeof item.isNote !== "function" || !item.isNote()) {
       return false;
     }
@@ -267,21 +261,7 @@ export function isClassNoteItem(
       typeof item.isTopLevelItem === "function"
         ? item.isTopLevelItem()
         : !item.parentItemID;
-    if (!topLevel) {
-      return false;
-    }
-    if (typeof item.hasTag === "function") {
-      if (item.hasTag(SYLLABUS_DOCUMENT_NOTE_TAG)) {
-        return false;
-      }
-      if (item.hasTag(PINNED_COLLECTION_NOTE_TAG)) {
-        return false;
-      }
-      if (item.hasTag(PERSONAL_READING_ORDER_NOTE_TAG)) {
-        return false;
-      }
-    }
-    return true;
+    return Boolean(topLevel);
   } catch {
     return false;
   }

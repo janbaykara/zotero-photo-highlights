@@ -79,12 +79,15 @@ import {
 import {
   initializePersonalReadingOrder,
   isAssignmentReadingDone,
+  isClassReadingDone,
   isItemReadingDone,
   mergePersonalReadingDoneKeys,
   getPersonalReadingOrderKeys,
   pinItemToPersonalReadingOrder,
+  removeClassReadingDone,
   removeItemFromPersonalReadingOrder,
   setAssignmentReadingDone,
+  setClassReadingDone,
   setItemReadingDone,
   shutdownPersonalReadingOrder,
   whenPersonalReadingOrderReady,
@@ -220,9 +223,9 @@ function coerceCollectionViewMode(value: unknown): CollectionViewMode {
 }
 
 /**
- * One-shot: copy assignment.status === "done" into the Personal Reading Order
- * note, then strip status from syllabus assignments (personal progress out of
- * the shared syllabus document).
+ * One-shot: copy assignment.status / class.status === "done" into the Personal
+ * Reading Order note, then strip those fields from the syllabus document
+ * (personal progress out of the shared syllabus note).
  */
 async function migrateAssignmentStatusToPersonalReadingDone(): Promise<void> {
   await Promise.all([
@@ -235,7 +238,9 @@ async function migrateAssignmentStatusToPersonalReadingDone(): Promise<void> {
       const document = getCollectionDocument(collection);
       const doneKeys: string[] = [];
       const doneAssignmentIds: string[] = [];
-      let needsStrip = false;
+      const doneClassIds: string[] = [];
+      let needsStripAssignments = false;
+      let needsStripClasses = false;
       for (const [itemKey, assignments] of Object.entries(
         document.items || {},
       )) {
@@ -244,7 +249,7 @@ async function migrateAssignmentStatusToPersonalReadingDone(): Promise<void> {
         if (doneInItem.length === 0) {
           continue;
         }
-        needsStrip = true;
+        needsStripAssignments = true;
         for (const assignment of doneInItem) {
           if (assignment.id) {
             doneAssignmentIds.push(assignment.id);
@@ -255,39 +260,67 @@ async function migrateAssignmentStatusToPersonalReadingDone(): Promise<void> {
           doneKeys.push(itemKey);
         }
       }
-      if (!needsStrip) {
+      for (const [classId, meta] of Object.entries(document.classes || {})) {
+        if (meta?.status === "done") {
+          needsStripClasses = true;
+          doneClassIds.push(classId);
+        }
+      }
+      if (!needsStripAssignments && !needsStripClasses) {
         continue;
       }
       await mergePersonalReadingDoneKeys(
         collection,
         doneKeys,
         doneAssignmentIds,
+        doneClassIds,
       );
       await mutateCollectionDocument(collection, (doc) => {
-        const items: typeof doc.items = {};
-        for (const [itemKey, assignments] of Object.entries(doc.items || {})) {
-          const next = (assignments || [])
-            .map((assignment) => {
-              if (assignment.status == null) {
-                return assignment;
-              }
-              const { status: _status, ...rest } = assignment;
-              return rest;
-            })
-            .filter((assignment) => {
-              // Drop rows that only existed for personal done tracking.
-              return Boolean(
-                assignment.classId ||
-                assignment.classNumber != null ||
-                assignment.priority ||
-                assignment.classInstruction,
-              );
-            });
-          if (next.length) {
-            items[itemKey] = next;
+        let nextDoc = doc;
+        if (needsStripAssignments) {
+          const items: typeof doc.items = {};
+          for (const [itemKey, assignments] of Object.entries(
+            doc.items || {},
+          )) {
+            const next = (assignments || [])
+              .map((assignment) => {
+                if (assignment.status == null) {
+                  return assignment;
+                }
+                const { status: _status, ...rest } = assignment;
+                return rest;
+              })
+              .filter((assignment) => {
+                // Drop rows that only existed for personal done tracking.
+                return Boolean(
+                  assignment.classId ||
+                  assignment.classNumber != null ||
+                  assignment.priority ||
+                  assignment.classInstruction,
+                );
+              });
+            if (next.length) {
+              items[itemKey] = next;
+            }
           }
+          nextDoc = { ...nextDoc, items };
         }
-        return { ...doc, items };
+        if (needsStripClasses) {
+          const classes: typeof doc.classes = {};
+          for (const [classId, meta] of Object.entries(nextDoc.classes || {})) {
+            if (!meta) {
+              continue;
+            }
+            if (meta.status == null) {
+              classes[classId] = meta;
+              continue;
+            }
+            const { status: _status, ...rest } = meta;
+            classes[classId] = rest;
+          }
+          nextDoc = { ...nextDoc, classes };
+        }
+        return nextDoc;
       });
     } catch (error) {
       ztoolkit.log(
@@ -4128,12 +4161,15 @@ export class SyllabusManager {
     collectionId: number | GetByLibraryAndKeyArgs,
     classNumber: number,
   ) {
-    return (
+    const meta =
       classByNumber(
         SyllabusManager.getSyllabusMetadata(collectionId),
         classNumber,
-      ) || {}
-    );
+      ) || {};
+    return {
+      ...meta,
+      status: SyllabusManager.getClassStatus(collectionId, classNumber),
+    };
   }
 
   /**
@@ -4171,9 +4207,29 @@ export class SyllabusManager {
       ztoolkit.log("Error validating class metadata:", parsed.error);
       return;
     }
+    const data = parsed.data;
+    // Class done is personal progress — live on the PRO note, not the syllabus.
+    if ("status" in data) {
+      const { status, ...rest } = data;
+      await SyllabusManager.setClassStatus(
+        collectionId,
+        classNumber,
+        status ?? null,
+        source,
+      );
+      if (Object.keys(rest).length === 0) {
+        return;
+      }
+      await SyllabusManager.patchCollectionMetadata(
+        collectionId,
+        { classes: { [String(classNumber)]: rest } },
+        source,
+      );
+      return;
+    }
     await SyllabusManager.patchCollectionMetadata(
       collectionId,
-      { classes: { [String(classNumber)]: parsed.data } },
+      { classes: { [String(classNumber)]: data } },
       source,
     );
   }
@@ -4262,21 +4318,33 @@ export class SyllabusManager {
   }
 
   /**
-   * Get class status for a specific collection and class number
+   * Get class status for a specific collection and class number.
+   * Personal Reading Order is canonical; legacy `classes[].status` is fallback.
    */
   static getClassStatus(
     collectionId: number | GetByLibraryAndKeyArgs,
     classNumber: number,
   ): ClassStatus {
-    const metadata = SyllabusManager.getClassMetadata(
+    const classId = SyllabusManager.getClassIdByNumber(
       collectionId,
       classNumber,
     );
-    return metadata.status || null;
+    const collection =
+      SyllabusManager.getCollectionFromIdentifier(collectionId);
+    if (classId && collection && isClassReadingDone(collection, classId)) {
+      return "done";
+    }
+    const metadata = classByNumber(
+      SyllabusManager.getSyllabusMetadata(collectionId),
+      classNumber,
+    );
+    return metadata?.status || null;
   }
 
   /**
-   * Set class status for a specific collection and class number
+   * Set class status for a specific collection and class number.
+   * Writes Personal Reading Order `classDone`, then refreshes the syllabus note
+   * envelope (folder ✅ / readable headings) and strips any legacy status.
    */
   static async setClassStatus(
     collectionId: number | GetByLibraryAndKeyArgs,
@@ -4284,12 +4352,31 @@ export class SyllabusManager {
     status: ClassStatus,
     source: "page" | "item-pane",
   ): Promise<void> {
-    await SyllabusManager.setClassMetadata(
+    const classId = await SyllabusManager.ensureClass(
       collectionId,
       classNumber,
-      { status },
-      source,
     );
+    const collection =
+      SyllabusManager.getCollectionFromIdentifier(collectionId);
+    if (collection) {
+      await setClassReadingDone(collection, classId, status === "done");
+    }
+    await mutateCollectionDocument(
+      collectionId,
+      (document) => {
+        const meta = document.classes?.[classId];
+        if (!meta || meta.status == null) {
+          return document;
+        }
+        const { status: _status, ...rest } = meta;
+        return {
+          ...document,
+          classes: { ...document.classes, [classId]: rest },
+        };
+      },
+      { createNote: source === "page" ? "prompt" : "always" },
+    );
+    this.onClassListUpdate();
   }
 
   /**
@@ -4350,15 +4437,17 @@ export class SyllabusManager {
     source: "page",
   ): Promise<void> {
     ztoolkit.log("SyllabusManager.deleteClass", collectionId, classNumber);
+    const classId = SyllabusManager.getClassIdByNumber(
+      collectionId,
+      classNumber,
+    );
     await mutateCollectionDocument(collectionId, (document) => {
       const classes = { ...(document.classes || {}) };
-      const classId = findClassIdByNumber(
-        classes,
-        classNumber,
-        document.classOrder,
-      );
-      if (classId) {
-        delete classes[classId];
+      const id =
+        classId ||
+        findClassIdByNumber(classes, classNumber, document.classOrder);
+      if (id) {
+        delete classes[id];
       }
       const classOrder = orderedClassIds({
         classes,
@@ -4369,7 +4458,7 @@ export class SyllabusManager {
         document.items || {},
       )) {
         const remaining = assignments.filter((assignment) => {
-          if (classId && assignment.classId === classId) {
+          if (id && assignment.classId === id) {
             return false;
           }
           return assignment.classNumber !== classNumber;
@@ -4380,6 +4469,17 @@ export class SyllabusManager {
       }
       return { ...document, classes, classOrder, items };
     });
+    if (classId) {
+      try {
+        const collection =
+          SyllabusManager.getCollectionFromIdentifier(collectionId);
+        if (collection) {
+          await removeClassReadingDone(collection, [classId]);
+        }
+      } catch (error) {
+        ztoolkit.log("Error clearing classDone after deleteClass:", error);
+      }
+    }
     this.onClassListUpdate();
   }
 

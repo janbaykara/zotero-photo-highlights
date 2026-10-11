@@ -100,8 +100,10 @@ import {
 } from "./syllabusNoteHtml";
 import {
   getPersonalReadingOrderDescription,
+  isClassReadingDone,
   isPersonalReadingOrderNote,
 } from "./personalReadingOrder";
+import { SYLLABUS_NOTE_TAG } from "../utils/pluginManagedNotes";
 
 export { absorbSyllabusExtraFromItems } from "./syllabusExtra";
 export {
@@ -109,11 +111,11 @@ export {
   parseSyllabusNote,
   serializeSyllabusNote,
 } from "./syllabusNoteHtml";
+export { SYLLABUS_NOTE_TAG } from "../utils/pluginManagedNotes";
 
 type CollectionIdentifier =
   number | Parameters<typeof Zotero.Collections.getByLibraryAndKey>;
 
-export const SYLLABUS_NOTE_TAG = "zotero-syllabus";
 /** Legacy / fallback note title; recognition also accepts titles that start with this. */
 export const SYLLABUS_NOTE_TITLE = "Syllabus";
 /** Prefix for the human-readable note H1 (Zotero’s note title). */
@@ -1697,6 +1699,26 @@ export function peekPersistedSyllabusDocument(
   }
 }
 
+/** Class ids marked done in PRO (plus legacy `classes[].status` until migrated). */
+function doneClassIdsForNote(
+  document: CollectionSyllabusDocument,
+  collection?: Zotero.Collection | null,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const [classId, meta] of Object.entries(document.classes || {})) {
+    if (!classId) {
+      continue;
+    }
+    if (
+      (collection && isClassReadingDone(collection, classId)) ||
+      meta?.status === "done"
+    ) {
+      ids.add(classId);
+    }
+  }
+  return ids;
+}
+
 async function noteHtmlForDocument(
   document: CollectionSyllabusDocument,
   collection?: Zotero.Collection | null,
@@ -1834,6 +1856,7 @@ function managedClassFolderParent(
     const classNumber =
       getClassNumberById(classes, classId, parentEntry.document.classOrder) ??
       meta.number;
+    const done = isClassReadingDone(parent, classId) || meta.status === "done";
     if (
       meta.subcollectionKey === collection.key ||
       (classNumber != null &&
@@ -1842,6 +1865,7 @@ function managedClassFolderParent(
           meta,
           collection.name,
           classNumber,
+          done,
         ))
     ) {
       return parent;
@@ -1908,10 +1932,17 @@ export function getClassSubcollectionContext(
     }
     const classNumber =
       getClassNumberById(classes, classId, document.classOrder) ?? meta.number;
+    const done = isClassReadingDone(parent, classId) || meta.status === "done";
     if (
       meta.subcollectionKey === collection.key ||
       (classNumber != null &&
-        classFolderNameMatches(document, meta, collection.name, classNumber))
+        classFolderNameMatches(
+          document,
+          meta,
+          collection.name,
+          classNumber,
+          done,
+        ))
     ) {
       rememberManagedClassFolder(collection, parent);
       return { parent, classId, classNumber: classNumber ?? null };
@@ -2375,7 +2406,8 @@ async function rebuildDocumentIndex(): Promise<void> {
       continue;
     }
     try {
-      rememberManagedSubcollections(collection, entry.document);
+      const doneClassIds = doneClassIdsForNote(entry.document, collection);
+      rememberManagedSubcollections(collection, entry.document, doneClassIds);
       if (
         patchedIds.has(collection.id) ||
         !shouldCreateSubcollections(entry.document)
@@ -2383,7 +2415,12 @@ async function rebuildDocumentIndex(): Promise<void> {
         continue;
       }
       const ensured = await enqueueClassFolderEnsure(collection, () =>
-        ensureClassSubcollections(collection, entry.document, entry.document),
+        ensureClassSubcollections(
+          collection,
+          entry.document,
+          entry.document,
+          doneClassIds,
+        ),
       );
       if (!ensured) {
         continue;
@@ -2740,8 +2777,9 @@ export async function mutateCollectionDocument(
       }
       setCacheEntry(ref, note.id || null, note.version || 0, next);
       try {
+        const doneClassIds = doneClassIdsForNote(next, collection);
         const ensured = await enqueueClassFolderEnsure(collection, () =>
-          ensureClassSubcollections(collection, next, current),
+          ensureClassSubcollections(collection, next, current, doneClassIds),
         );
         if (ensured) {
           next = ensured;
@@ -2749,7 +2787,7 @@ export async function mutateCollectionDocument(
             refreshManagedCollectionTrees();
           }
         }
-        rememberManagedSubcollections(collection, next);
+        rememberManagedSubcollections(collection, next, doneClassIds);
         setCacheEntry(ref, note.id || null, note.version || 0, next);
       } catch (error) {
         ztoolkit.log("Error ensuring class subcollections:", error);
@@ -3027,7 +3065,12 @@ function handleManagedCollectionChange(
       if (!cached) {
         return;
       }
-      return ensureClassSubcollections(parent, cached, cached);
+      return ensureClassSubcollections(
+        parent,
+        cached,
+        cached,
+        doneClassIdsForNote(cached, parent),
+      );
     }).catch((error) => {
       ztoolkit.log("Error restoring class subcollection name:", error);
     });

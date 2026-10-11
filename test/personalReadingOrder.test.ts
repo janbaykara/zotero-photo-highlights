@@ -89,6 +89,22 @@ describe("personal reading order", function () {
     assert.isNotNull(parsed);
     assert.deepEqual(parsed!.done, []);
     assert.deepEqual(parsed!.assignmentDone, []);
+    assert.deepEqual(parsed!.classDone, []);
+  });
+
+  it("round-trips classDone class ids", function () {
+    const html = serializePersonalReadingOrderNote({
+      version: PERSONAL_READING_ORDER_VERSION,
+      order: [],
+      done: [],
+      assignmentDone: [],
+      classDone: ["class-1", "class-2"],
+    });
+    assert.include(html, "&quot;classDone&quot;");
+    assert.include(html, "&quot;class-1&quot;");
+    const parsed = parsePersonalReadingOrderNote(html);
+    assert.isNotNull(parsed);
+    assert.deepEqual(parsed!.classDone, ["class-1", "class-2"]);
   });
 
   it("detects personal reading order payloads", function () {
