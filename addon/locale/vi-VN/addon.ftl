@@ -743,7 +743,7 @@ explorer-recent-in-feed = Recent in feed
 explorer-recent-in-feed-desc = Latest items from your feeds.
 explorer-recent-annotations = Recent annotations
 explorer-recent-annotations-desc = Highlights you made recently.
-my-annotations-empty = No recent annotations
+my-annotations-empty = No annotations
 my-annotations-empty-color-filter = Không có chú thích khớp với màu đã chọn
 my-annotations-empty-tag-filter = Không có chú thích khớp với thẻ đã chọn
 my-annotations-empty-filters = Không có chú thích khớp với bộ lọc đã chọn
@@ -807,6 +807,8 @@ annotations-activity-gap-earlier =
     }
 my-annotations-load-previous = Load previous
 my-annotations-load-previous-loading = Loading…
+my-annotations-end = Your first annotation
+my-annotations-end-search = Start of results
 my-annotations-open-in-reader = Open in reader
 my-annotations-copy = Copy
 my-annotations-copied = Copied

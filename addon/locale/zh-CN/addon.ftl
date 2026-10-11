@@ -737,7 +737,7 @@ explorer-recent-in-feed = 订阅源最近更新
 explorer-recent-in-feed-desc = 订阅源中的最新条目。
 explorer-recent-annotations = 最近批注
 explorer-recent-annotations-desc = 最近做的高亮批注。
-my-annotations-empty = 暂无近期批注
+my-annotations-empty = 暂无批注
 my-annotations-empty-color-filter = 没有与所选颜色匹配的批注
 my-annotations-empty-tag-filter = 没有与所选标签匹配的批注
 my-annotations-empty-filters = 没有与所选筛选条件匹配的批注
@@ -777,6 +777,8 @@ annotations-activity-gap-earlier =
     }
 my-annotations-load-previous = Load previous
 my-annotations-load-previous-loading = Loading…
+my-annotations-end = Your first annotation
+my-annotations-end-search = Start of results
 my-annotations-open-in-reader = Open in reader
 my-annotations-copy = Copy
 my-annotations-copied = Copied

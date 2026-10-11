@@ -1,5 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { h, Fragment } from "preact";
+import type { RefObject } from "preact";
 import {
   useCallback,
   useEffect,
@@ -88,12 +89,17 @@ function streamGroupEdgeAdded(
 function LoadPreviousButton({
   loading,
   onClick,
+  sentinelRef,
 }: {
   loading: boolean;
   onClick: () => void;
+  sentinelRef?: RefObject<HTMLDivElement>;
 }) {
   return (
-    <div className="syllabus-my-annotations-load-previous-wrap">
+    <div
+      className="syllabus-my-annotations-load-previous-wrap"
+      ref={sentinelRef}
+    >
       {loading ? (
         <div
           className="syllabus-my-annotations-load-previous-status"
@@ -122,6 +128,70 @@ function LoadPreviousButton({
 }
 
 const NEAR_EDGE_PX = 80;
+
+type ScrollAnchor =
+  | { kind: "live" }
+  | {
+      kind: "anchor";
+      /** Keep this annotation's on-screen offset after older rows prepend. */
+      annotationId: string;
+      offset: number;
+    }
+  | {
+      kind: "height";
+      height: number;
+      top: number;
+    };
+
+/** First annotation intersecting the scroll viewport (for prepend anchoring). */
+function captureAnnotationScrollAnchor(
+  container: HTMLElement,
+): Exclude<ScrollAnchor, { kind: "live" }> {
+  const containerTop = container.getBoundingClientRect().top;
+  const nodes = container.querySelectorAll<HTMLElement>("[data-annotation-id]");
+  for (const node of nodes) {
+    const id = node.getAttribute("data-annotation-id");
+    if (!id) {
+      continue;
+    }
+    const rect = node.getBoundingClientRect();
+    if (rect.bottom > containerTop + 1) {
+      return {
+        kind: "anchor",
+        annotationId: id,
+        offset: rect.top - containerTop,
+      };
+    }
+  }
+  return {
+    kind: "height",
+    height: container.scrollHeight,
+    top: container.scrollTop,
+  };
+}
+
+function restoreScrollAnchor(
+  container: HTMLElement,
+  anchor: Exclude<ScrollAnchor, { kind: "live" }>,
+): void {
+  if (anchor.kind === "height") {
+    container.scrollTop = anchor.top + (container.scrollHeight - anchor.height);
+    return;
+  }
+  const escaped =
+    typeof CSS !== "undefined" && typeof CSS.escape === "function"
+      ? CSS.escape(anchor.annotationId)
+      : anchor.annotationId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const node = container.querySelector<HTMLElement>(
+    `[data-annotation-id="${escaped}"]`,
+  );
+  if (!node) {
+    return;
+  }
+  const containerTop = container.getBoundingClientRect().top;
+  const nextOffset = node.getBoundingClientRect().top - containerTop;
+  container.scrollTop += nextOffset - anchor.offset;
+}
 
 export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
   const [searchInput, setSearchInput] = useState("");
@@ -155,12 +225,14 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
   const { selectedItemIds } = useItemIdentifierSelection();
   const pageRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
+  const loadPreviousSentinelRef = useRef<HTMLDivElement>(null);
   const pinnedToLiveRef = useRef(true);
-  const pendingScrollRef = useRef<
-    { kind: "live" } | { kind: "anchor"; height: number; top: number } | null
-  >({ kind: "live" });
-  const prevRowCountRef = useRef(0);
+  const pendingScrollRef = useRef<ScrollAnchor | null>({ kind: "live" });
+  const prevDisplayRowCountRef = useRef(0);
+  const prevStreamRowCountRef = useRef(0);
   const skipNextPinTrackRef = useRef(false);
+  /** Set on real user scroll so open/live-stick cannot cascade-load. */
+  const userScrolledRef = useRef(false);
 
   useEffect(() => {
     if (searchActive) {
@@ -169,6 +241,7 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
     pinnedToLiveRef.current = true;
     pendingScrollRef.current = { kind: "live" };
     skipNextPinTrackRef.current = true;
+    userScrolledRef.current = false;
   }, [searchActive]);
 
   const displayRows = useMemo(
@@ -249,6 +322,7 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
       pinnedToLiveRef.current = true;
       pendingScrollRef.current = { kind: "live" };
       skipNextPinTrackRef.current = true;
+      userScrolledRef.current = false;
     },
     [setOrder],
   );
@@ -258,38 +332,14 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
       return;
     }
     const el = pageRef.current;
-    if (el) {
-      pendingScrollRef.current = {
-        kind: "anchor",
-        height: el.scrollHeight,
-        top: el.scrollTop,
-      };
+    if (el && order === "newestLast") {
+      // newestLast prepends above the viewport — pin a visible annotation.
+      // newestFirst appends below — scrollTop can stay as-is.
+      pendingScrollRef.current = captureAnnotationScrollAnchor(el);
       skipNextPinTrackRef.current = true;
     }
     await loadPrevious();
-  }, [hasMore, loading, loadingMore, loadPrevious]);
-
-  /** Previous page sits at the top (newestLast) or bottom (newestFirst). */
-  const isNearPreviousEdge = useCallback(() => {
-    const el = pageRef.current;
-    if (!el) {
-      return false;
-    }
-    if (order === "newestLast") {
-      return el.scrollTop <= NEAR_EDGE_PX;
-    }
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    return distance <= NEAR_EDGE_PX;
-  }, [order]);
-
-  const maybeAutoloadPrevious = useCallback(() => {
-    if (!hasMore || loading || loadingMore) {
-      return;
-    }
-    if (isNearPreviousEdge()) {
-      void handleLoadPrevious();
-    }
-  }, [hasMore, loading, loadingMore, isNearPreviousEdge, handleLoadPrevious]);
+  }, [hasMore, loading, loadingMore, loadPrevious, order]);
 
   useLayoutEffect(() => {
     const el = pageRef.current;
@@ -297,43 +347,55 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
       return;
     }
     const pending = pendingScrollRef.current;
-    const grew = displayRows.length > prevRowCountRef.current;
-    prevRowCountRef.current = displayRows.length;
+    // Stream row count (not filtered display) — filters can hide a whole page
+    // and would otherwise leave the prepend anchor stuck forever.
+    const streamGrew = rows.length > prevStreamRowCountRef.current;
+    const displayGrew = displayRows.length > prevDisplayRowCountRef.current;
+    prevStreamRowCountRef.current = rows.length;
+    prevDisplayRowCountRef.current = displayRows.length;
 
-    if (pending?.kind === "anchor") {
-      const delta = el.scrollHeight - pending.height;
-      el.scrollTop = pending.top + delta;
+    if (pending?.kind === "anchor" || pending?.kind === "height") {
+      // Wait until rows actually arrive — loading indicator swap must not
+      // clear the anchor or the prepend will jump the viewport to the top.
+      if (!streamGrew) {
+        // loadPrevious no-op / failed: drop the anchor so layout can proceed.
+        if (!loadingMore) {
+          pendingScrollRef.current = null;
+          skipNextPinTrackRef.current = false;
+        }
+        return;
+      }
+      // Keep skipNextPinTrack through the restore scroll so it does not count
+      // as user intent.
+      restoreScrollAnchor(el, pending);
       pendingScrollRef.current = null;
-      skipNextPinTrackRef.current = false;
       updatePinnedFromScroll();
-      // Still at the previous edge (short page / large filter) → keep filling.
-      maybeAutoloadPrevious();
+      queueMicrotask(() => {
+        skipNextPinTrackRef.current = false;
+      });
       return;
     }
 
+    // Only stick when opening/order-change (pending live) or new rows while
+    // pinned — never on every render via `loading === false` (that yanked the
+    // viewport back to the live edge and killed upward autoload).
     const shouldStickLive =
-      pending?.kind === "live" ||
-      (pinnedToLiveRef.current && (grew || loading === false));
+      pending?.kind === "live" || (pinnedToLiveRef.current && displayGrew);
 
     if (shouldStickLive) {
+      skipNextPinTrackRef.current = true;
       if (order === "newestLast") {
         el.scrollTop = el.scrollHeight;
       } else {
         el.scrollTop = 0;
       }
       pendingScrollRef.current = null;
-      skipNextPinTrackRef.current = false;
       pinnedToLiveRef.current = true;
-      // Short viewport: live edge coincides with previous → fill upward/back.
-      maybeAutoloadPrevious();
+      queueMicrotask(() => {
+        skipNextPinTrackRef.current = false;
+      });
     }
-  }, [
-    displayRows,
-    order,
-    loading,
-    updatePinnedFromScroll,
-    maybeAutoloadPrevious,
-  ]);
+  }, [displayRows, rows.length, order, loadingMore, updatePinnedFromScroll]);
 
   useEffect(() => {
     const el = pageRef.current;
@@ -341,22 +403,68 @@ export function MyAnnotationsPage({ libraryID }: { libraryID: number }) {
       return;
     }
     const onScroll = () => {
+      if (!skipNextPinTrackRef.current) {
+        userScrolledRef.current = true;
+      }
       updatePinnedFromScroll();
-      maybeAutoloadPrevious();
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, [updatePinnedFromScroll, maybeAutoloadPrevious]);
+  }, [updatePinnedFromScroll]);
 
-  const loadPreviousControl =
-    hasMore && !loading ? (
-      <LoadPreviousButton
-        loading={loadingMore}
-        onClick={() => {
-          void handleLoadPrevious();
-        }}
+  // Autoload when the Load-previous control intersects the scrollport after
+  // the user has scrolled (IO root = the feed scroller).
+  useEffect(() => {
+    const root = pageRef.current;
+    const target = loadPreviousSentinelRef.current;
+    if (!root || !target || !hasMore || loading) {
+      return;
+    }
+    const win = root.ownerDocument.defaultView;
+    if (!win || typeof win.IntersectionObserver !== "function") {
+      return;
+    }
+    const observer = new win.IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) {
+          return;
+        }
+        if (!userScrolledRef.current || skipNextPinTrackRef.current) {
+          return;
+        }
+        void handleLoadPrevious();
+      },
+      { root, rootMargin: `${NEAR_EDGE_PX}px`, threshold: 0 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, order, handleLoadPrevious, rows.length]);
+
+  const loadPreviousControl = loading ? null : hasMore ? (
+    <LoadPreviousButton
+      loading={loadingMore}
+      sentinelRef={loadPreviousSentinelRef}
+      onClick={() => {
+        void handleLoadPrevious();
+      }}
+    />
+  ) : rows.length > 0 ? (
+    <div className="syllabus-annotations-activity-gap" role="status">
+      <span
+        className="syllabus-annotations-activity-gap-rule"
+        aria-hidden="true"
       />
-    ) : null;
+      <span className="syllabus-annotations-activity-gap-label">
+        {getString(
+          searchActive ? "my-annotations-end-search" : "my-annotations-end",
+        )}
+      </span>
+      <span
+        className="syllabus-annotations-activity-gap-rule"
+        aria-hidden="true"
+      />
+    </div>
+  ) : null;
 
   return (
     <AnnotationSelectionProvider orderedIds={orderedAnnotationIds}>

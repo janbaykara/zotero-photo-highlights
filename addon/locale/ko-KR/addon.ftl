@@ -743,7 +743,7 @@ explorer-recent-in-feed = Recent in feed
 explorer-recent-in-feed-desc = Latest items from your feeds.
 explorer-recent-annotations = Recent annotations
 explorer-recent-annotations-desc = Highlights you made recently.
-my-annotations-empty = No recent annotations
+my-annotations-empty = No annotations
 my-annotations-empty-color-filter = 선택한 색의 주석이 없습니다
 my-annotations-empty-tag-filter = 선택한 태그의 주석이 없습니다
 my-annotations-empty-filters = 선택한 필터와 일치하는 주석이 없습니다
@@ -783,6 +783,8 @@ annotations-activity-gap-earlier =
     }
 my-annotations-load-previous = Load previous
 my-annotations-load-previous-loading = Loading…
+my-annotations-end = Your first annotation
+my-annotations-end-search = Start of results
 my-annotations-open-in-reader = Open in reader
 my-annotations-copy = Copy
 my-annotations-copied = Copied

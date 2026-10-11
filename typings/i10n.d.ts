@@ -340,6 +340,8 @@ export type FluentMessageId =
   | 'my-annotations-empty-filters'
   | 'my-annotations-empty-search'
   | 'my-annotations-empty-tag-filter'
+  | 'my-annotations-end'
+  | 'my-annotations-end-search'
   | 'my-annotations-layout-grid'
   | 'my-annotations-layout-grid-title'
   | 'my-annotations-layout-vertical'

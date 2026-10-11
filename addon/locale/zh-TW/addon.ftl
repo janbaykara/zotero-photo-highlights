@@ -743,7 +743,7 @@ explorer-recent-in-feed = Recent in feed
 explorer-recent-in-feed-desc = Latest items from your feeds.
 explorer-recent-annotations = Recent annotations
 explorer-recent-annotations-desc = Highlights you made recently.
-my-annotations-empty = No recent annotations
+my-annotations-empty = No annotations
 my-annotations-empty-color-filter = 沒有符合所選顏色的註解
 my-annotations-empty-tag-filter = 沒有符合所選標籤的註解
 my-annotations-empty-filters = 沒有符合所選篩選條件的註解
@@ -783,6 +783,8 @@ annotations-activity-gap-earlier =
     }
 my-annotations-load-previous = Load previous
 my-annotations-load-previous-loading = Loading…
+my-annotations-end = Your first annotation
+my-annotations-end-search = Start of results
 my-annotations-open-in-reader = Open in reader
 my-annotations-copy = Copy
 my-annotations-copied = Copied

@@ -743,7 +743,7 @@ explorer-recent-in-feed = Reciente en el feed
 explorer-recent-in-feed-desc = Novedades de tus canales.
 explorer-recent-annotations = Anotaciones recientes
 explorer-recent-annotations-desc = Resaltados que hiciste recientemente.
-my-annotations-empty = No hay anotaciones recientes
+my-annotations-empty = No hay anotaciones
 my-annotations-empty-color-filter = Ninguna anotación coincide con los colores seleccionados
 my-annotations-empty-tag-filter = Ninguna anotación coincide con las etiquetas seleccionadas
 my-annotations-empty-filters = Ninguna anotación coincide con los filtros seleccionados
@@ -807,6 +807,8 @@ annotations-activity-gap-earlier =
     }
 my-annotations-load-previous = Load previous
 my-annotations-load-previous-loading = Loading…
+my-annotations-end = Your first annotation
+my-annotations-end-search = Start of results
 my-annotations-open-in-reader = Open in reader
 my-annotations-copy = Copy
 my-annotations-copied = Copied

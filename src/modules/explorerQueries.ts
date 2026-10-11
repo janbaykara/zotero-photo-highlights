@@ -604,9 +604,8 @@ export async function searchRecentAnnotations(
 }
 
 export const MY_ANNOTATIONS_STREAM_PAGE_SIZE = 50;
-export const MY_ANNOTATIONS_STREAM_LOOKBACK_DAYS = 365;
 
-/** Trim; empty/whitespace means “no search” (live 365-day timeline). */
+/** Trim; empty/whitespace means “no search” (live library timeline). */
 export function normalizeMyAnnotationsSearchQuery(query: unknown): string {
   return String(query ?? "").trim();
 }
@@ -959,7 +958,7 @@ async function searchMyAnnotationsStreamByQuery(
 
 /**
  * Newest `limit` annotations (descending).
- * Empty `query` → live lookback window. Non-empty → matching annotation
+ * Empty `query` → full library timeline. Non-empty → matching annotation
  * quotes/comments and/or full-text paragraphs per `scope`.
  * Increase `limit` to "load previous".
  */
@@ -983,11 +982,6 @@ export async function searchMyAnnotationsStream(
   }
   const ids = await searchItemIds(libraryID, [
     ["itemType", "is", "annotation"],
-    [
-      "dateModified",
-      "isInTheLast",
-      `${MY_ANNOTATIONS_STREAM_LOOKBACK_DAYS} days`,
-    ],
   ]);
   const rows: MyAnnotationStreamEntry[] = [];
   for (const id of ids) {
@@ -1522,6 +1516,12 @@ const myAnnotationsStreamAtomFamily = atomFamilyFromExternal(
 
     const reload = async (mode: "initial" | "refresh" | "more") => {
       const cache = ensureCache();
+      // A concurrent refresh would bump loadToken and discard an in-flight
+      // "more", so the Load-previous click looks like a no-op while hasMore
+      // stays true. Skip refresh until the page load finishes.
+      if (mode === "refresh" && (cache.loadingMore || cache.loading)) {
+        return;
+      }
       const token = ++loadToken;
       if (mode === "more") {
         bump({ loadingMore: true });
@@ -1586,6 +1586,11 @@ const myAnnotationsStreamAtomFamily = atomFamilyFromExternal(
           Zotero.Notifier.unregisterObserver(notifierID);
           debounced.cancel();
           loadToken += 1;
+          const cache = myAnnotationsStreamCache.get(cacheKey);
+          if (cache) {
+            cache.loading = false;
+            cache.loadingMore = false;
+          }
         };
       },
     };
