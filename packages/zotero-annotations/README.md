@@ -38,7 +38,9 @@ const next = toggleAnnotationColorFilter(filter, "#ffd400");
 const visible = annotations.filter((a) =>
   annotationMatchesColorFilter(a.annotationColor, next),
 );
-const swatches = collectAnnotationColors(annotations.map((a) => a.annotationColor));
+const swatches = collectAnnotationColors(
+  annotations.map((a) => a.annotationColor),
+);
 const darkMark = annotationSwatchUsesDarkMark(hex ?? "#ffd400");
 ```
 

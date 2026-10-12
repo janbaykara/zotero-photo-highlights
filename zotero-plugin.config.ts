@@ -134,6 +134,8 @@ var queueMicrotask = globalThis.queueMicrotask;
   },
 
   test: {
+    // Root suite + each workspace package that ships Mocha tests under test/.
+    entries: ["test", "packages/*/test"],
     watch: false,
     waitForPlugin: `() => !!(Zotero.${pkg.config.addonInstance} && Zotero.${pkg.config.addonInstance}.data && Zotero.${pkg.config.addonInstance}.data.initialized)`,
   },

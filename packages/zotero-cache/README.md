@@ -56,11 +56,16 @@ import { getCachedPref } from "@janbaykara/zotero-cache";
 import { z } from "zod";
 
 // Plain pref (cached + auto-invalidated via subscribePref):
-const styleUrl = getCachedPref<string>("extensions.zotero.export.quickCopy.setting");
+const styleUrl = getCachedPref<string>(
+  "extensions.zotero.export.quickCopy.setting",
+);
 
 // JSON pref with Zod:
 const LayoutSchema = z.object({ columns: z.number() });
-const layout = getCachedPref("extensions.zotero.syllabus.galleryLayout", LayoutSchema);
+const layout = getCachedPref(
+  "extensions.zotero.syllabus.galleryLayout",
+  LayoutSchema,
+);
 
 // Versioned JSON (verzod VersionedEntity) — pass as third arg when you use verzod entities.
 ```

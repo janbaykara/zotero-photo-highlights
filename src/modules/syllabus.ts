@@ -384,7 +384,6 @@ function syllabusViewModeChrome(): { label: string; tooltip: string } | null {
   return null;
 }
 
-
 function confirmEnableSubcollections(
   collectionId: number | GetByLibraryAndKeyArgs,
 ): boolean {

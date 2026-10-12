@@ -59,9 +59,7 @@ export const ZOTERO_CONTENT_XHTML = [
 
 export type ZoteroContentXhtml = (typeof ZOTERO_CONTENT_XHTML)[number];
 
-export function isZoteroContentXhtml(
-  path: string,
-): path is ZoteroContentXhtml {
+export function isZoteroContentXhtml(path: string): path is ZoteroContentXhtml {
   return (ZOTERO_CONTENT_XHTML as readonly string[]).includes(path);
 }
 

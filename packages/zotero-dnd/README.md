@@ -30,7 +30,15 @@ import {
 // Stable options at module scope — a new object every render remounts the manager.
 const DROP_INDICATOR = { axis: "vertical" as const };
 
-function Tile({ id, index, group }: { id: string; index: number; group: string }) {
+function Tile({
+  id,
+  index,
+  group,
+}: {
+  id: string;
+  index: number;
+  group: string;
+}) {
   const { ref, isDragSource } = useSortable({ id, index, group, type: "item" });
   return (
     <div ref={ref} className={isDragSource ? "is-dragging" : undefined}>

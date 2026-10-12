@@ -38,7 +38,11 @@ import { generateBibliographicReference } from "@janbaykara/zotero-csl";
 const text = await generateBibliographicReference(item);
 // or force a style, disable author–date fallback:
 const apa = await generateBibliographicReference(item, false, styleUrl);
-const many = await generateBibliographicReference([itemA, itemB], true, styleUrl);
+const many = await generateBibliographicReference(
+  [itemA, itemB],
+  true,
+  styleUrl,
+);
 ```
 
 Tries (in order): optional `styleUrl` → Quick Copy style → last visible style → optional fallback formatter.
@@ -51,7 +55,9 @@ import { generateBibliographyForPrint } from "@janbaykara/zotero-csl";
 const result = await generateBibliographyForPrint(items, styleUrl);
 if (result) {
   // result.isHtml ? inject as HTML : escape as text
-  container.innerHTML = result.isHtml ? result.content : escapeHtml(result.content);
+  container.innerHTML = result.isHtml
+    ? result.content
+    : escapeHtml(result.content);
 }
 ```
 

@@ -199,9 +199,7 @@ async function main() {
       `Collected ${content.length} content + ${skin.length} skin from ${localSrc}`,
     );
   } else {
-    console.log(
-      `Fetching chrome content+skin from zotero/zotero@${ref}…`,
-    );
+    console.log(`Fetching chrome content+skin from zotero/zotero@${ref}…`);
     const remote = await collectFromGitHub(ref);
     content = remote.content;
     skin = remote.skin;

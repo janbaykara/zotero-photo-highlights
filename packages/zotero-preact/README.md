@@ -73,8 +73,7 @@ const readingTab = new TabManager<{ libraryID: number }>({
   type: "my-reading",
   title: () => "My reading",
   getTabId: (params) => `my-reading-${params?.libraryID ?? 0}`,
-  rootElementIdFactory: (params) =>
-    `my-reading-root-${params?.libraryID ?? 0}`,
+  rootElementIdFactory: (params) => `my-reading-root-${params?.libraryID ?? 0}`,
   data: () => ({ icon: "library" }), // optional Zotero_Tabs data
   componentFactory: (params) =>
     h(ReadingPage, { libraryID: params!.libraryID }),

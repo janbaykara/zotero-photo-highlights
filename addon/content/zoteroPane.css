@@ -5740,7 +5740,9 @@ button.syllabus-explorer-class-segment-header:focus-visible {
  * and covers shrink to ~half width.
  */
 .syllabus-gallery-grid
-  > .syllabus-personal-order-tile:has(> .syllabus-gallery-tile.has-gallery-note),
+  > .syllabus-personal-order-tile:has(
+    > .syllabus-gallery-tile.has-gallery-note
+  ),
 .syllabus-gallery-grid
   > .syllabus-personal-order-capture-item:has(
     > .syllabus-gallery-tile.has-gallery-note

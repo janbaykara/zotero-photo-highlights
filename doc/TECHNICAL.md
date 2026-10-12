@@ -181,17 +181,17 @@ Collection-scoped notes on regular items for Gallery / card views. Each note is 
 
 Shared chrome libraries live under [`packages/`](../packages/README.md) and are consumed with `workspace:*` (TypeScript source; esbuild bundles them into the XPI). Docs site: [Workspace packages](https://janbaykara.github.io/zotero-syllabus/developers/packages/). Index and per-package READMEs: [`packages/README.md`](../packages/README.md).
 
-| Package                             | Purpose                                       |
-| ----------------------------------- | --------------------------------------------- |
-| `@janbaykara/zotero-jotai-state`    | Prefs/Notifier subscribe + `atomFromExternal` |
-| `@janbaykara/zotero-cache`          | Notifier-invalidated item/collection/pref LRU |
-| `@janbaykara/zotero-annotations`    | Annotation color/tag/batch/highlight utils    |
-| `@janbaykara/zotero-os-file-drop`   | OS file/URL drop (core + `/preact`)           |
+| Package                             | Purpose                                                        |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `@janbaykara/zotero-jotai-state`    | Prefs/Notifier subscribe + `atomFromExternal`                  |
+| `@janbaykara/zotero-cache`          | Notifier-invalidated item/collection/pref LRU                  |
+| `@janbaykara/zotero-annotations`    | Annotation color/tag/batch/highlight utils                     |
+| `@janbaykara/zotero-os-file-drop`   | OS file/URL drop (core + `/preact`)                            |
 | `@janbaykara/zotero-chrome`         | Typed chrome content/skin URLs, window features, XUL, tags-box |
-| `@janbaykara/zotero-csl`            | CSL styles + bibliography                     |
-| `@janbaykara/zotero-dnd`            | Chrome DnD (core + `/preact`)                 |
-| `@janbaykara/zotero-preact`         | Preact roots, tabs, dialogs                   |
-| `@janbaykara/zotero-tailwind-theme` | Tailwind `@theme` → Zotero CSS tokens         |
+| `@janbaykara/zotero-csl`            | CSL styles + bibliography                                      |
+| `@janbaykara/zotero-dnd`            | Chrome DnD (core + `/preact`)                                  |
+| `@janbaykara/zotero-preact`         | Preact roots, tabs, dialogs                                    |
+| `@janbaykara/zotero-tailwind-theme` | Tailwind `@theme` → Zotero CSS tokens                          |
 
 Only `@janbaykara/zotero-preact` needs host wiring ([`configurePackages.ts`](../src/utils/configurePackages.ts)); other packages use `Zotero` or call-site options. Scaffold watches `packages/` alongside `src` / `addon`.
 
@@ -370,13 +370,13 @@ cp .env.example .env   # set your Zotero installation path
 pnpm start
 ```
 
-| Command                            | Purpose                                     |
-| ---------------------------------- | ------------------------------------------- |
-| `pnpm start`                       | Run in development mode                     |
-| `pnpm run build`                   | Production build (includes `lint:check`)    |
-| `pnpm test`                        | Test suite (launches Zotero)                |
-| `pnpm run lint:check` / `lint:fix` | Format and lint (same rules as CI)          |
-| `pnpm run release`                 | Build the `.xpi` and prepare a distribution |
+| Command                            | Purpose                                             |
+| ---------------------------------- | --------------------------------------------------- |
+| `pnpm start`                       | Run in development mode                             |
+| `pnpm run build`                   | Production build (includes `lint:check`)            |
+| `pnpm test`                        | Mocha suite in Zotero (`test/` + `packages/*/test`) |
+| `pnpm run lint:check` / `lint:fix` | Format and lint (same rules as CI)                  |
+| `pnpm run release`                 | Build the `.xpi` and prepare a distribution         |
 
 Use **pnpm** only (`packageManager` + `pnpm-lock.yaml`). After pulling dependency changes, run `pnpm install` so local `lint:fix` / `lint:check` match CI. Do not commit `package-lock.json`.
 
