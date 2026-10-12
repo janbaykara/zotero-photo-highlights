@@ -40,11 +40,11 @@ import {
   User,
   Video,
 } from "lucide-preact";
-import { renderComponent } from "../utils/react";
+import { renderComponent } from "@janbaykara/zotero-preact";
 import { isZotero8OrLater, libraryDisplayName } from "../utils/zotero";
-import { getCachedCollectionByKey } from "../utils/cache";
+import { getCachedCollectionByKey } from "@janbaykara/zotero-cache";
 import { isSyllabusMemberItem, openItemBestAttachment } from "../utils/items";
-import { collectAnnotationColors } from "../utils/annotationColors";
+import { collectAnnotationColors } from "@janbaykara/zotero-annotations";
 import { getString, getUiDir } from "../utils/locale";
 import { formatRelativeReadingDate, formatReadingDate } from "../utils/dates";
 import {

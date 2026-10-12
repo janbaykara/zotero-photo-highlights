@@ -48,7 +48,7 @@ import {
   type CollectionShareOptions,
 } from "./sharePayload";
 import { bibliographyToHtml } from "../modules/Bibliography";
-import { generateBibliographyForPrint } from "./cite";
+import { generateBibliographyForPrint } from "@janbaykara/zotero-csl";
 import { isDevelopmentEnv } from "./env";
 
 async function readAttachmentBytes(

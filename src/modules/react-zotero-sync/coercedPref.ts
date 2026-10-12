@@ -5,7 +5,7 @@
 import { useCallback } from "preact/hooks";
 import { useAtomValue } from "jotai";
 import { subscribePluginPref } from "../../utils/prefs";
-import { atomFromExternal } from "./jotaiExternal";
+import { atomFromExternal } from "@janbaykara/zotero-jotai-state";
 
 type PluginPrefsMap = _ZoteroTypes.Prefs["PluginPrefsMap"];
 

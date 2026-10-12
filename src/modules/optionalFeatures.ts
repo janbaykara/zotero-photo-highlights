@@ -4,7 +4,7 @@ import {
   setPref,
   subscribePluginPref,
 } from "../utils/prefs";
-import { zoteroCache } from "../utils/cache";
+import { zoteroCache } from "@janbaykara/zotero-cache";
 import { FEATURE_FLAG } from "./featureFlags";
 
 export type OptionalFeatureId =

@@ -1,15 +1,6 @@
-import { getCachedItem } from "./cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
+import { pickLibraryItems as pickLibraryItemsCore } from "@janbaykara/zotero-chrome";
 import { isTestEnv } from "./env";
-
-type SelectItemsDialogIO = {
-  singleSelection: boolean;
-  multiSelect: boolean;
-  dataIn: unknown;
-  dataOut: unknown;
-  deferred: _ZoteroTypes.Promise.DeferredPromise<void>;
-  filterLibraryIDs?: number[];
-  itemTreeID?: string;
-};
 
 /**
  * Open Zotero’s Select Items dialog (library tree + search).
@@ -24,58 +15,11 @@ export async function pickLibraryItems(options?: {
   /** Collection-tree id to select initially (e.g. `L1`). */
   initialFolder?: string;
 }): Promise<Zotero.Item[]> {
-  if (isTestEnv()) {
-    return [];
-  }
-  const win = Zotero.getMainWindow();
-  if (!win) {
-    return [];
-  }
-
-  const io: SelectItemsDialogIO = {
-    singleSelection: false,
-    multiSelect: true,
-    dataIn: null,
-    dataOut: null,
-    deferred: Zotero.Promise.defer(),
+  return pickLibraryItemsCore({
+    ...options,
+    isEnabled: () => !isTestEnv(),
+    getItem: (id) => getCachedItem(id) || Zotero.Items.get(id),
     itemTreeID: "zotero-syllabus-select-items",
-  };
-  if (options?.libraryID != null) {
-    io.filterLibraryIDs = [options.libraryID];
-  }
-
-  const folderPref = "lastViewedFolder";
-  const previousFolder =
-    options?.initialFolder != null ? Zotero.Prefs.get(folderPref) : undefined;
-  if (options?.initialFolder != null) {
-    Zotero.Prefs.set(folderPref, options.initialFolder);
-  }
-
-  try {
-    win.openDialog(
-      "chrome://zotero/content/selectItemsDialog.xhtml",
-      "",
-      "chrome,dialog=no,centerscreen,resizable=yes",
-      io,
-    );
-    await io.deferred.promise;
-  } catch (error) {
-    ztoolkit.log("Error opening item picker:", error);
-    return [];
-  } finally {
-    if (previousFolder !== undefined) {
-      Zotero.Prefs.set(folderPref, previousFolder);
-    }
-  }
-
-  const ids = Array.isArray(io.dataOut)
-    ? io.dataOut.filter((id): id is number => typeof id === "number")
-    : [];
-  if (ids.length === 0) {
-    return [];
-  }
-
-  return ids
-    .map((id) => getCachedItem(id) || Zotero.Items.get(id))
-    .filter((item): item is Zotero.Item => Boolean(item));
+    log: (message, error) => ztoolkit.log(message, error),
+  });
 }

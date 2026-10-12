@@ -187,20 +187,16 @@
  * Chrome DnD paints .is-drop-highlight on the empty zone (sortables own
  * filled lists). Tint the dashed landing UI — not the zone chrome alone.
  */
-.syllabus-dnd-zone.is-drop-highlight .syllabus-class-dropzone-hint,
-.syllabus-dnd-zone.is-drop-highlight .syllabus-add-class-dropzone-placeholder {
+.syllabus-dnd-zone.is-drop-highlight .syllabus-class-dropzone-hint {
   border-color: var(--accent-blue, #2255e0);
   background: color-mix(in srgb, var(--accent-blue, #2255e0) 15%, transparent);
   color: var(--accent-blue, #2255e0);
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease;
+  /* No border-color transition — Gecko interpolates accent→fill through white. */
 }
 
 .syllabus-dnd-zone.is-empty-zone.is-drop-highlight:not(
     :has(.syllabus-class-dropzone-hint)
-  ):not(:has(.syllabus-add-class-dropzone-placeholder)) {
+  ) {
   outline: 2px dashed var(--accent-blue, #2255e0);
   background: color-mix(in srgb, var(--accent-blue, #2255e0) 15%, transparent);
   color: var(--accent-blue, #2255e0);
@@ -5738,11 +5734,36 @@ button.syllabus-explorer-class-segment-header:focus-visible {
   align-content: end;
 }
 
+/*
+ * Gallery notes span two parent columns. The DnD wrapper is the grid item, so
+ * it must take that span — otherwise the note layout squeezes into one track
+ * and covers shrink to ~half width.
+ */
+.syllabus-gallery-grid
+  > .syllabus-personal-order-tile:has(> .syllabus-gallery-tile.has-gallery-note),
+.syllabus-gallery-grid
+  > .syllabus-personal-order-capture-item:has(
+    > .syllabus-gallery-tile.has-gallery-note
+  ) {
+  grid-column: span 2;
+}
+
 .syllabus-gallery-grid > .syllabus-personal-order-tile > .syllabus-gallery-tile,
 .syllabus-gallery-grid
   > .syllabus-personal-order-capture-item
   > .syllabus-gallery-tile {
   margin-bottom: 0;
+}
+
+/* Nested tile is not a child of the gallery grid — don't invent wrapper columns. */
+.syllabus-gallery-grid
+  > .syllabus-personal-order-tile
+  > .syllabus-gallery-tile.has-gallery-note,
+.syllabus-gallery-grid
+  > .syllabus-personal-order-capture-item
+  > .syllabus-gallery-tile.has-gallery-note {
+  grid-column: auto;
+  width: 100%;
 }
 
 @supports not (grid-template-rows: subgrid) {

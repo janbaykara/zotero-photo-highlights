@@ -10,7 +10,7 @@ import {
   type CollectionSyllabusDocument,
   type StoredClassMetadata,
 } from "../utils/schemas";
-import { getCachedCollectionById } from "../utils/cache";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
 import { formatReadingDate, parseReadingDate } from "../utils/dates";
 import { getAppLocale } from "../utils/locale";
 import {

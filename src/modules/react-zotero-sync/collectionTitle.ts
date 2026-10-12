@@ -1,7 +1,7 @@
 import { useCallback } from "preact/hooks";
 import { useAtomValue } from "jotai";
 import { SyllabusManager, GetByLibraryAndKeyArgs } from "../syllabus";
-import { atomFamilyFromExternal } from "./jotaiExternal";
+import { atomFamilyFromExternal } from "@janbaykara/zotero-jotai-state";
 
 function collectionTitleKey(
   collectionId: number | GetByLibraryAndKeyArgs,

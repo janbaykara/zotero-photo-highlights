@@ -1,5 +1,5 @@
 import type { FluentMessageId } from "../../typings/i10n";
-import { zoteroCache } from "../utils/cache";
+import { zoteroCache } from "@janbaykara/zotero-cache";
 import { getString } from "../utils/locale";
 import { getPref, getPrefKey, setPref } from "../utils/prefs";
 import { DEFAULT_PRIORITIES, Priority, PrioritySchema } from "../utils/schemas";

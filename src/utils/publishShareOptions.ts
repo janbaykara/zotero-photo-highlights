@@ -1,6 +1,6 @@
 import * as z from "zod";
 import { config } from "../../package.json";
-import { getCachedPref, zoteroCache } from "./cache";
+import { getCachedPref, zoteroCache } from "@janbaykara/zotero-cache";
 import { getGalleryLayout } from "../modules/galleryLayout";
 import { getGallerySortBy } from "../modules/gallerySort";
 import { getGalleryGroupBy } from "../modules/galleryGroupBy";

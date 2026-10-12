@@ -43,7 +43,7 @@ import {
   runCollectionUnpublish,
   type CollectionPublishUiStatus,
 } from "../utils/runCollectionPublish";
-import { renderComponent } from "../utils/react";
+import { renderComponent } from "@janbaykara/zotero-preact";
 import { isZotero8OrLater } from "../utils/zotero";
 import {
   isClassNoteItem,
@@ -105,6 +105,7 @@ import {
 import { useMagazinePacking, type MagazinePacking } from "./magazinePacking";
 import { useViewQuoteOrder } from "./myAnnotationsPrefs";
 import { useShowItemsWithoutAnnotations } from "./showItemsWithoutAnnotations";
+import { useShowGalleryNotes } from "./showGalleryNotes";
 import { useIncludeAutomaticTags } from "./includeAutomaticTags";
 import type { AnnotationsQuoteOrder } from "./explorerQueries";
 import {
@@ -127,7 +128,7 @@ import {
 import { GalleryViewportProvider } from "./galleryVisibility";
 import { useGallerySortBy, type GallerySortBy } from "./gallerySort";
 import { collectionHasSyllabusNote } from "./syllabusNote";
-import { RestrictToVerticalAxis } from "../zotero-dnd";
+import { RestrictToVerticalAxis } from "@janbaykara/zotero-dnd";
 import { PersonalOrderCapture } from "./PersonalOrderCapture";
 import { PersonalOrderGallery } from "./PersonalOrderGallery";
 import {
@@ -154,7 +155,10 @@ import { useCollectionTagGroups } from "./tagGroups";
 import { useCollectionItemTypeGroups } from "./typeGroups";
 import { SubcollectionNode, useSubcollectionTree } from "./subcollectionGroups";
 import { SyllabusManager, classByNumber } from "./syllabus";
-import { getCachedCollectionById, getCachedItem } from "../utils/cache";
+import {
+  getCachedCollectionById,
+  getCachedItem,
+} from "@janbaykara/zotero-cache";
 import { getString, getUiDir } from "../utils/locale";
 import {
   importDroppedOsFilesIntoCurrentView,
@@ -359,6 +363,8 @@ export function GalleryPage({
     [collectionId, isPinnedFolder, libraryID, setSortBy],
   );
   const [readerMode, setReaderMode, readerModeGlobal] = useReaderMode(viewKey);
+  const [showGalleryNotes, setShowGalleryNotes, showGalleryNotesGlobal] =
+    useShowGalleryNotes(viewKey);
   const [magazinePacking, setMagazinePacking, magazinePackingGlobal] =
     useMagazinePacking(viewKey);
   const [density] = useItemDensity(viewKey);
@@ -969,7 +975,7 @@ export function GalleryPage({
             key={`${keyPrefix}-${item.id}`}
             item={item}
             collectionId={collectionIdOrZero}
-            showGalleryNote={true}
+            showGalleryNote={showGalleryNotes}
             selected={selectedItemIds?.includes(item.id) || false}
             chrome={chromeByItemId?.get(item.id)}
             onClick={handleClick}
@@ -996,7 +1002,7 @@ export function GalleryPage({
         collectionId={collectionIdOrZero}
         selectedItemIds={selectedItemIds}
         showItemsWithoutAnnotations={showItemsWithoutAnnotations}
-        showGalleryNote={true}
+        showGalleryNote={showGalleryNotes}
         chromeByItemId={chromeByItemId ?? readerChromeForItems(ordered)}
         colorFilterScope={viewKey}
         streamOrder={streamOrder}
@@ -1022,7 +1028,7 @@ export function GalleryPage({
           keyPrefix={keyPrefix}
           density={density}
           readerMode={readerMode}
-          showGalleryNote={true}
+          showGalleryNote={showGalleryNotes}
           selectedIdentifiers={selectedIdentifiers}
           selectedItemIds={selectedItemIds}
           onIdentifierClick={handleIdentifierClick}
@@ -1046,7 +1052,7 @@ export function GalleryPage({
         template={template}
         packing={magazinePacking}
         collectionId={collectionIdOrZero}
-        showGalleryNote={true}
+        showGalleryNote={showGalleryNotes}
         selectedItemIds={selectedItemIds}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
@@ -1124,7 +1130,7 @@ export function GalleryPage({
                 keyPrefix="personal"
                 density={density}
                 readerMode={readerMode}
-                showGalleryNote={true}
+                showGalleryNote={showGalleryNotes}
                 selectedIdentifiers={selectedIdentifiers}
                 selectedItemIds={selectedItemIds}
                 onIdentifierClick={handleIdentifierClick}
@@ -1141,7 +1147,7 @@ export function GalleryPage({
                 template={magazineSectionTemplate(0)}
                 packing={magazinePacking}
                 collectionId={collectionIdOrZero}
-                showGalleryNote={true}
+                showGalleryNote={showGalleryNotes}
                 selectedItemIds={selectedItemIds}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
@@ -1161,7 +1167,7 @@ export function GalleryPage({
                 collectionId={collectionIdOrZero}
                 selectedItemIds={selectedItemIds}
                 showItemsWithoutAnnotations={showItemsWithoutAnnotations}
-                showGalleryNote={true}
+                showGalleryNote={showGalleryNotes}
                 chromeByItemId={
                   chrome ? new Map([[item.id, chrome]]) : undefined
                 }
@@ -1176,7 +1182,7 @@ export function GalleryPage({
             <GalleryTile
               item={item}
               collectionId={collectionIdOrZero}
-              showGalleryNote={true}
+              showGalleryNote={showGalleryNotes}
               selected={selectedItemIds?.includes(item.id) || false}
               chrome={chrome}
               onClick={handleClick}
@@ -1238,6 +1244,10 @@ export function GalleryPage({
                 readerMode={readerMode}
                 onReaderMode={setReaderMode}
                 readerModeGlobal={readerModeGlobal}
+                showNotesControl={isCollectionScope}
+                showNotes={showGalleryNotes}
+                onShowNotes={setShowGalleryNotes}
+                showNotesGlobal={showGalleryNotesGlobal}
                 sortBy={sortBy}
                 onSortBy={setSortBy}
                 sortByGlobal={sortByGlobal}
@@ -1933,6 +1943,10 @@ function GalleryPageHeader({
   readerMode = false,
   onReaderMode,
   readerModeGlobal,
+  showNotesControl = false,
+  showNotes = true,
+  onShowNotes,
+  showNotesGlobal,
   sortBy,
   onSortBy,
   sortByGlobal,
@@ -1971,6 +1985,11 @@ function GalleryPageHeader({
   readerMode?: boolean;
   onReaderMode?: (enabled: boolean) => void;
   readerModeGlobal?: GalleryGlobalSetting<boolean>;
+  /** Show the “Show personal notes” toggle (collection Gallery only). */
+  showNotesControl?: boolean;
+  showNotes?: boolean;
+  onShowNotes?: (show: boolean) => void;
+  showNotesGlobal?: GalleryGlobalSetting<boolean>;
   sortBy: GallerySortBy;
   onSortBy: (mode: GallerySortBy) => void;
   sortByGlobal: GalleryGlobalSetting<GallerySortBy>;
@@ -2218,14 +2237,25 @@ function GalleryPageHeader({
                     ) : null}
                   </div>
                 ) : null}
-                {showCheckboxes && onReaderMode ? (
+                {(showCheckboxes && onReaderMode) ||
+                (showNotesControl && onShowNotes) ? (
                   <div className="syllabus-gallery-toolbar-section">
-                    <GalleryPrefCheckbox
-                      label={getString("page-view-checkboxes")}
-                      checked={readerMode}
-                      onChange={onReaderMode}
-                      globalSetting={readerModeGlobal}
-                    />
+                    {showCheckboxes && onReaderMode ? (
+                      <GalleryPrefCheckbox
+                        label={getString("page-view-checkboxes")}
+                        checked={readerMode}
+                        onChange={onReaderMode}
+                        globalSetting={readerModeGlobal}
+                      />
+                    ) : null}
+                    {showNotesControl && onShowNotes ? (
+                      <GalleryPrefCheckbox
+                        label={getString("gallery-show-notes")}
+                        checked={showNotes}
+                        onChange={onShowNotes}
+                        globalSetting={showNotesGlobal}
+                      />
+                    ) : null}
                   </div>
                 ) : null}
               </div>

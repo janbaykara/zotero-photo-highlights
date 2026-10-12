@@ -1,12 +1,12 @@
 import { useMemo } from "preact/hooks";
 import { useAtomValue } from "jotai";
-import { getCachedItem } from "../../utils/cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { isSyllabusMemberItem } from "../../utils/items";
 import {
   treeViewIDFromRow,
   type CollectionTreeRowLike,
 } from "../../utils/viewScope";
-import { atomFamilyFromExternal } from "./jotaiExternal";
+import { atomFamilyFromExternal } from "@janbaykara/zotero-jotai-state";
 
 /**
  * Sentinel snapshot: the items tree is not applying a search/tag/advanced

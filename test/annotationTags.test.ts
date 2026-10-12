@@ -4,7 +4,7 @@ import {
   normalizeAnnotationTagFilter,
   parseAnnotationTagFilter,
   serializeAnnotationTagFilter,
-} from "../src/utils/annotationTags";
+} from "@janbaykara/zotero-annotations";
 
 describe("annotationTags", function () {
   describe("parseAnnotationTagFilter", function () {

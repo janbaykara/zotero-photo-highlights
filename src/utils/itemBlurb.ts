@@ -1,4 +1,4 @@
-import { getCachedItem } from "./cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { getItemAbstractSnippet, snippetFromAbstractNote } from "./items";
 import {
   firstPdfContentPick,

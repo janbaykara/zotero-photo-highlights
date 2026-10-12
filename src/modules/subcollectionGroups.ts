@@ -1,10 +1,13 @@
 import { useMemo } from "preact/hooks";
 import { useAtomValue } from "jotai";
 import SuperJSON from "superjson";
-import { getCachedCollectionById, getCachedItem } from "../utils/cache";
+import {
+  getCachedCollectionById,
+  getCachedItem,
+} from "@janbaykara/zotero-cache";
 import { SyllabusManager } from "./syllabus";
 import { getString, compareLocale } from "../utils/locale";
-import { atomFamilyFromExternal } from "./react-zotero-sync/jotaiExternal";
+import { atomFamilyFromExternal } from "@janbaykara/zotero-jotai-state";
 
 export type SubcollectionNode = {
   collectionId: number;

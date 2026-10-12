@@ -8,13 +8,13 @@ import {
   anyHighlightColorDescriptions,
   getHighlightColorDescription,
 } from "../highlight-descriptions/compat";
-import { ZOTERO_ANNOTATION_COLOR_ORDER } from "../utils/annotationColors";
+import { ZOTERO_ANNOTATION_COLOR_ORDER } from "@janbaykara/zotero-annotations";
 import {
   collectTagsForAnnotations,
   recolorAnnotations,
   tagAnnotations,
   untagAnnotations,
-} from "../utils/annotationBatch";
+} from "@janbaykara/zotero-annotations";
 import { openAnnotationTagFilterPopup } from "../utils/annotationTagFilterPopup";
 import { copyStringToClipboard } from "../utils/clipboard";
 import { getString } from "../utils/locale";

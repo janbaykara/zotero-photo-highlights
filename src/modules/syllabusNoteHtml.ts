@@ -9,7 +9,7 @@ import {
   type CollectionSyllabusDocument,
   type ItemSyllabusAssignment,
 } from "../utils/schemas";
-import { generateBibliographicReference } from "../utils/cite";
+import { generateBibliographicReference } from "@janbaykara/zotero-csl";
 import { getItemTitle } from "../utils/items";
 import { classSubcollectionName } from "./classSubcollections";
 import {

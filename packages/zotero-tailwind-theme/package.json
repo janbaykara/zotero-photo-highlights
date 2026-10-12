@@ -1,0 +1,14 @@
+{
+  "name": "@janbaykara/zotero-tailwind-theme",
+  "version": "0.1.0",
+  "description": "Tailwind v4 @theme bridge to live Zotero chrome CSS tokens",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    ".": "./theme.css",
+    "./theme.css": "./theme.css"
+  },
+  "peerDependencies": {
+    "tailwindcss": "^4.0.0"
+  }
+}

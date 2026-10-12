@@ -1,7 +1,10 @@
 import { useMemo } from "preact/hooks";
 import { atom, useAtomValue } from "jotai";
-import { getCachedItem, isObjectLifecycleEvent } from "../../utils/cache";
-import { atomFamilyFromExternal } from "./jotaiExternal";
+import {
+  getCachedItem,
+  isObjectLifecycleEvent,
+} from "@janbaykara/zotero-cache";
+import { atomFamilyFromExternal } from "@janbaykara/zotero-jotai-state";
 
 const itemVersions = new Map<number, number>();
 const emptyItemVersionAtom = atom(0);

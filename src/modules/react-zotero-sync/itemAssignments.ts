@@ -1,7 +1,7 @@
 import { useMemo } from "preact/hooks";
 import { atom, useAtomValue } from "jotai";
 import { ItemSyllabusAssignment } from "../syllabus";
-import { getCachedItem } from "../../utils/cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { isSyllabusAssignableItem } from "../../utils/items";
 import { collectionDocumentSnapshotAtomFamily } from "./collectionDocument";
 import {

@@ -1,4 +1,4 @@
-import { getCachedItem } from "./cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { getPageCount } from "./readingTime";
 
 export type AttachmentReadingProgress = {

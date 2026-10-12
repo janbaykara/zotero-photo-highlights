@@ -7,7 +7,7 @@ import {
   parseAnnotationColorFilter,
   serializeAnnotationColorFilter,
   toggleAnnotationColorFilter,
-} from "../src/utils/annotationColors";
+} from "@janbaykara/zotero-annotations";
 
 describe("annotationColors", function () {
   describe("parseAnnotationColorFilter", function () {

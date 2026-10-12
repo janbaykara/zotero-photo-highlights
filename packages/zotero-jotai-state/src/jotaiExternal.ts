@@ -1,0 +1,78 @@
+/**
+ * Shared data layer helpers (Jotai default store).
+ *
+ * Conventions:
+ * - External truth (Zotero pane, prefs, plugin note caches) → atomFromExternal /
+ *   atomFamilyFromExternal with onMount subscribe + equality-aware set.
+ * - Prefer entity-keyed atoms for Zotero state (item / collection / …)
+ *   over generation counters at call sites.
+ * - Plugin UI truth → plain atom; write with useSetAtom / getDefaultStore().set.
+ * - Never wrap Preact roots in <Provider>; default store is shared across roots.
+ */
+
+import { atom, type PrimitiveAtom } from "jotai";
+import { atomFamily, type AtomFamily } from "jotai-family";
+
+export type ExternalSource<T> = {
+  getSnapshot: () => T;
+  subscribe: (onStoreChange: () => void) => () => void;
+  /** Skip set when unchanged. Defaults to Object.is. */
+  equal?: (a: T, b: T) => boolean;
+  /**
+   * Fallback when `getSnapshot` throws at module load (circular import /
+   * cold Zotero). onMount still syncs the real value.
+   */
+  initial?: T;
+};
+
+/**
+ * Atom that mirrors an external source. onMount attaches once for the default
+ * store (first subscriber) and cleans up when the last subscriber leaves.
+ */
+export function atomFromExternal<T>(
+  source: ExternalSource<T>,
+): PrimitiveAtom<T> {
+  const equal = source.equal ?? Object.is;
+  let initial: T;
+  try {
+    initial = source.getSnapshot();
+  } catch {
+    initial =
+      "initial" in source ? (source.initial as T) : (undefined as unknown as T);
+  }
+  const anAtom = atom(initial) as PrimitiveAtom<T>;
+
+  anAtom.onMount = (setAtom) => {
+    const sync = () => {
+      let next: T;
+      try {
+        next = source.getSnapshot();
+      } catch {
+        // Keep the last good value (or `initial`) rather than crashing render.
+        return;
+      }
+      setAtom((prev: T) => (equal(prev, next) ? prev : next));
+    };
+    // Subscribe first so sources can prime module caches before the first sync.
+    const unsubscribe = source.subscribe(sync);
+    sync();
+    return unsubscribe;
+  };
+
+  return anAtom;
+}
+
+export type { AtomFamily };
+
+/**
+ * Per-key external atoms via `jotai-family` (atomFamily left jotai/utils in v3).
+ */
+export function atomFamilyFromExternal<Key, T>(
+  createSource: (key: Key) => ExternalSource<T>,
+  areEqual?: (a: Key, b: Key) => boolean,
+): AtomFamily<Key, PrimitiveAtom<T>> {
+  return atomFamily(
+    (key: Key) => atomFromExternal(createSource(key)),
+    areEqual,
+  );
+}

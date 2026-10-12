@@ -4,7 +4,7 @@
 
 import { useAtomValue } from "jotai";
 import { subscribeGalleryNoteChanges } from "../galleryNote";
-import { atomFromExternal } from "./jotaiExternal";
+import { atomFromExternal } from "@janbaykara/zotero-jotai-state";
 
 let galleryNoteGeneration = 0;
 

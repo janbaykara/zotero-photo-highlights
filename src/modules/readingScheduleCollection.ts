@@ -11,7 +11,7 @@ import {
   getClassNumberById,
   type CollectionSyllabusDocument,
 } from "../utils/schemas";
-import { getCachedCollectionById } from "../utils/cache";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
 import {
   formatReadingDateStored,
   isReadingDateInScheduleWindow,

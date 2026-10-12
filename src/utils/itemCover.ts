@@ -1,4 +1,4 @@
-import { getCachedItem } from "./cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { getItemCreatorLine, getItemTitle } from "./items";
 import { getString } from "./locale";
 import {

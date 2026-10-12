@@ -4,7 +4,7 @@ import {
   recolorAnnotations,
   tagAnnotations,
   untagAnnotations,
-} from "../src/utils/annotationBatch";
+} from "@janbaykara/zotero-annotations";
 
 type FakeAnn = {
   id: number;

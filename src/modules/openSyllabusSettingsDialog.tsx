@@ -1,12 +1,12 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { h } from "preact";
 import { getString } from "../utils/locale";
-import { getCachedCollectionById } from "../utils/cache";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
 import { isTestEnv } from "../utils/env";
 import {
   openPreactDialog,
   type PreactDialogHandle,
-} from "../utils/preactDialog";
+} from "@janbaykara/zotero-preact";
 import { SettingsPage } from "./SettingsPage";
 
 let openHandle: PreactDialogHandle | null = null;

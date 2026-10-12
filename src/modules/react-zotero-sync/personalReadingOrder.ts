@@ -12,8 +12,11 @@ import {
   subscribeToSyllabusDocumentChanges,
 } from "../syllabusNote";
 import { findClassIdByNumber } from "../../utils/schemas";
-import { getCachedCollectionById } from "../../utils/cache";
-import { atomFamilyFromExternal, atomFromExternal } from "./jotaiExternal";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
+import {
+  atomFamilyFromExternal,
+  atomFromExternal,
+} from "@janbaykara/zotero-jotai-state";
 
 const personalReadingOrderGenerationAtom = atomFromExternal({
   getSnapshot: () => getPersonalReadingOrderGeneration(),

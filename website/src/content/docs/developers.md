@@ -11,6 +11,10 @@ End-user behaviour is documented on this site. Storage formats, item merges, cla
 
 - [`doc/TECHNICAL.md`](https://github.com/janbaykara/zotero-syllabus/blob/main/doc/TECHNICAL.md)
 
+## Workspace packages
+
+Shared chrome libraries live under [`packages/`](https://github.com/janbaykara/zotero-syllabus/tree/main/packages). Overview: **[Reference → Workspace packages](/zotero-syllabus/developers/packages/)**. Repo index: [`packages/README.md`](https://github.com/janbaykara/zotero-syllabus/blob/main/packages/README.md).
+
 ## Public JS API
 
 Other plugins call `Zotero.Syllabus.api`. See **[Reference → API](/zotero-syllabus/api/variables/syllabusapi/)** for the intro, example, and full method reference (generated from [`src/api.ts`](https://github.com/janbaykara/zotero-syllabus/blob/main/src/api.ts) via [starlight-typedoc](https://starlight-typedoc.vercel.app/)).

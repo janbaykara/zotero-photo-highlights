@@ -22,8 +22,8 @@ import {
   libraryDisplayName,
   selectZoteroCollection,
 } from "../utils/zotero";
-import { getCachedCollectionById } from "../utils/cache";
-import { TabManager } from "../utils/tabManager";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
+import { TabManager } from "@janbaykara/zotero-preact";
 import { classByNumber } from "../utils/schemas";
 import { getString, getUiDir } from "../utils/locale";
 import { ProseText } from "./ProseText";

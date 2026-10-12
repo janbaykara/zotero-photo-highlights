@@ -1,5 +1,5 @@
 import { ExtraFieldTool } from "zotero-plugin-toolkit";
-import { getCachedPref } from "../utils/cache";
+import { getCachedPref } from "@janbaykara/zotero-cache";
 
 const extraFieldTool = new ExtraFieldTool();
 

@@ -33,7 +33,7 @@ import {
   getCachedCollectionById,
   getCachedCollectionByKey,
   getCachedItem,
-} from "../utils/cache";
+} from "@janbaykara/zotero-cache";
 import { pruneStaleCollectionPrefs } from "../utils/collectionPrefs";
 import { createReentrantSerialQueue } from "../utils/serialQueue";
 import {

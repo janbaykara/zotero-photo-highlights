@@ -18,7 +18,7 @@ import { useMagazineBlurb } from "./useMagazineBlurb";
 import {
   getItemHighlightSample,
   type ItemHighlight,
-} from "../utils/itemHighlights";
+} from "@janbaykara/zotero-annotations";
 import { formatReadingTime, getReadingTimeSync } from "../utils/readingTime";
 import {
   getPlaceholderCover,

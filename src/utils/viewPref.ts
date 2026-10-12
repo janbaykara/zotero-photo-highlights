@@ -1,9 +1,9 @@
 import { useCallback } from "preact/hooks";
 import { useAtomValue } from "jotai";
 import * as z from "zod";
-import { getCachedPref, zoteroCache } from "./cache";
+import { getCachedPref, zoteroCache } from "@janbaykara/zotero-cache";
 import { getPref, getPrefKey, setPref, subscribePrefs } from "./prefs";
-import { atomFamilyFromExternal } from "../modules/react-zotero-sync/jotaiExternal";
+import { atomFamilyFromExternal } from "@janbaykara/zotero-jotai-state";
 
 type PluginPrefsMap = _ZoteroTypes.Prefs["PluginPrefsMap"];
 

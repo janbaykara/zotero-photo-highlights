@@ -1,7 +1,7 @@
 /** Build share.json from library data for collection publish. */
 
 import { formatDate } from "date-fns";
-import { getCachedItem } from "./cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { parseReadingDate } from "./dates";
 import { getString } from "./locale";
 import {
@@ -20,7 +20,7 @@ import { absoluteItemFileHref } from "./publishTarget";
 import { collectItemShareAnnotations, coverToDataUrl } from "./publishItem";
 import { itemTypeIconDataUri } from "./publishHtmlEnhance";
 import { formatSharePageLabel } from "./itemShareHtml";
-import { generateBibliographicReference } from "./cite";
+import { generateBibliographicReference } from "@janbaykara/zotero-csl";
 import type { PublishAttachmentPick } from "./publishSyllabus";
 import {
   SHARE_JSON,

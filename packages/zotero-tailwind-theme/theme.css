@@ -1,0 +1,100 @@
+/**
+ * Tailwind v4 @theme bridge to live Zotero chrome CSS custom properties.
+ * Import after tailwindcss theme/utilities so utilities resolve these names.
+ */
+
+@theme {
+  /* Materials / surfaces */
+  --color-background: var(--material-background);
+  --color-background-sidepane: var(--material-sidepane);
+  --color-background-toolbar: var(--material-toolbar);
+  --color-background-menu: var(--material-menu);
+  --color-border: var(--material-border, var(--color-border));
+  --color-panedivider: var(--material-panedivider, var(--color-panedivider));
+
+  /* Accents (host tokens; light/dark follow Zotero) */
+  --color-accent-azure: var(--accent-azure, #66adff);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-blue10: var(--accent-blue10);
+  --color-accent-blue30: var(--accent-blue30);
+  --color-accent-blue50: var(--accent-blue50);
+  --color-accent-gold: var(--accent-gold);
+  --color-accent-green: var(--accent-green);
+  --color-accent-highlight: var(--accent-highlight, rgba(255, 234, 0, 0.5));
+  --color-accent-orange: var(--accent-orange);
+  --color-accent-red: var(--accent-red);
+  --color-accent-teal: var(--accent-teal);
+  --color-accent-white: var(--accent-white);
+  --color-accent-wood: var(--accent-wood);
+  --color-accent-wood-dark: var(--accent-wood-dark);
+  --color-accent-yellow: var(--accent-yellow);
+
+  /* Fills / text */
+  --color-primary: var(--fill-primary);
+  --color-secondary: var(--fill-secondary);
+  --color-tertiary: var(--fill-tertiary);
+  --color-quarternary: var(--fill-quarternary);
+  --color-quinary: var(--fill-quinary);
+  --color-senary: var(--fill-senary);
+  --color-icon: var(--icon-color);
+
+  /* Semantic (Zotero / Firefox where present; fallbacks for older builds) */
+  --color-critical: var(
+    --color-critical,
+    light-dark(oklch(55% 0.21 15), oklch(83% 0.14 15))
+  );
+  --color-information: var(
+    --color-information,
+    light-dark(oklch(55% 0.24 260), oklch(83% 0.17 260))
+  );
+  --color-success: var(
+    --color-success,
+    light-dark(oklch(55% 0.21 145), oklch(83% 0.14 145))
+  );
+  --color-warning: var(
+    --color-warning,
+    light-dark(oklch(58% 0.24 90), oklch(86% 0.14 90))
+  );
+
+  /* Shadows — use host tokens when defined; otherwise Zotero-like recipes */
+  --box-shadow-card: var(
+    --box-shadow-card,
+    0 0.25px 0.75px light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.2)),
+    0 2px 6px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4))
+  );
+  --box-shadow-card-hover: var(
+    --box-shadow-card-hover,
+    0 0.5px 2px light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.2)),
+    0 4px 16px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4))
+  );
+  --box-shadow-level-1: var(
+    --box-shadow-level-1,
+    0 0 1px light-dark(rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.2)),
+    0 1px 2px light-dark(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.4))
+  );
+  --box-shadow-level-2: var(
+    --box-shadow-level-2,
+    0 0.25px 0.75px light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.2)),
+    0 2px 6px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4))
+  );
+  --box-shadow-level-3: var(
+    --box-shadow-level-3,
+    0 0.375px 1.5px light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.2)),
+    0 3px 12px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4))
+  );
+  --box-shadow-level-4: var(
+    --box-shadow-level-4,
+    0 0.5px 2px light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.2)),
+    0 4px 16px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4))
+  );
+  --box-shadow-popup: var(
+    --box-shadow-popup,
+    0 0.375px 1.5px light-dark(rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.2)),
+    0 3px 12px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4))
+  );
+  --box-shadow-tab: var(
+    --box-shadow-tab,
+    0 0 1px light-dark(rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0.2)),
+    0 1px 2px light-dark(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.4))
+  );
+}

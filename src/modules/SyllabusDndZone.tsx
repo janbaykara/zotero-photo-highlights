@@ -2,7 +2,7 @@
 import { h } from "preact";
 import type { ComponentChildren, JSX } from "preact";
 import { twMerge } from "tailwind-merge";
-import { useDroppable } from "../zotero-dnd";
+import { useDroppable } from "@janbaykara/zotero-dnd/preact";
 import { SYLLABUS_DND_ITEM_TYPE, syllabusDndZoneId } from "./syllabusDnd";
 import { useSyllabusPageDnd } from "./SyllabusPageDnd";
 

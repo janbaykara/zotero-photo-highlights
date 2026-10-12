@@ -40,10 +40,10 @@ import {
   getItemTitle,
   openItemBestAttachment,
 } from "../utils/items";
-import { getCachedItem } from "../utils/cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { libraryDisplayName, selectZoteroCollection } from "../utils/zotero";
 import { getString } from "../utils/locale";
-import { TabManager } from "../utils/tabManager";
+import { TabManager } from "@janbaykara/zotero-preact";
 import type { ItemDensity } from "./react-zotero-sync/itemDensity";
 import type { GalleryLayout } from "./galleryLayout";
 import type { MagazinePacking } from "./magazinePacking";

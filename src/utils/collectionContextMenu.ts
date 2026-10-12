@@ -2,7 +2,7 @@ import {
   itemContextMenuScreenPoint,
   shouldSkipItemContextMenuTarget,
 } from "./itemContextMenu";
-import { getCachedCollectionById } from "./cache";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
 
 type CollectionContextMenuPane = {
   collectionsView?: {

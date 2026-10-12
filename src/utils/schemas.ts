@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createVersionedEntity, defineVersion } from "verzod";
 import { uuidv7 } from "uuidv7";
-import { getCachedCollectionById } from "./cache";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
 
 // ztoolkit is available as a global
 declare const ztoolkit: ZToolkit;

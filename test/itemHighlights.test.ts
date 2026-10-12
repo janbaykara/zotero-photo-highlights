@@ -6,7 +6,7 @@ import {
   normalizeHighlightColor,
   pickHighlightSample,
   truncateHighlightText,
-} from "../src/utils/itemHighlights";
+} from "@janbaykara/zotero-annotations";
 
 function hl(
   id: number,

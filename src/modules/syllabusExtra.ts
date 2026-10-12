@@ -5,7 +5,7 @@ import {
   type ItemSyllabusAssignment,
   type ItemSyllabusData,
 } from "../utils/schemas";
-import { getCachedCollectionByKey } from "../utils/cache";
+import { getCachedCollectionByKey } from "@janbaykara/zotero-cache";
 import { isSyllabusMemberItem } from "../utils/items";
 import {
   collectionLibraryIsEditable,

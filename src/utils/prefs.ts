@@ -1,8 +1,8 @@
 import { config } from "../../package.json";
-import { getCachedPref, zoteroCache } from "./cache";
-import { subscribePref } from "./prefSubscribe";
+import { getCachedPref, zoteroCache } from "@janbaykara/zotero-cache";
+import { subscribePref } from "@janbaykara/zotero-jotai-state";
 
-export { subscribePref, subscribePrefs } from "./prefSubscribe";
+export { subscribePref, subscribePrefs } from "@janbaykara/zotero-jotai-state";
 
 type PluginPrefsMap = _ZoteroTypes.Prefs["PluginPrefsMap"];
 
@@ -65,6 +65,7 @@ export const PLUGIN_PREF_DEFAULTS: {
   annotationsQuoteOrder: "location",
   galleryShowItemsWithoutAnnotations: true,
   galleryIncludeAutomaticTags: false,
+  galleryShowNotes: true,
   syllabusShowClassNotes: true,
   magazineTypeSize: "small",
   magazinePacking: "packed",

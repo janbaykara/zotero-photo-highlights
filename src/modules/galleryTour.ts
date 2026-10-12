@@ -1,6 +1,6 @@
 import { getString } from "../utils/locale";
 import { getPrefKey, getPrefValue, setPref } from "../utils/prefs";
-import { zoteroCache } from "../utils/cache";
+import { zoteroCache } from "@janbaykara/zotero-cache";
 import { isTestEnv } from "../utils/env";
 import {
   GALLERY_LAYOUT_MODES,

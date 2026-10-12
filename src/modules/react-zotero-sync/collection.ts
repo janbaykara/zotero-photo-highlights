@@ -1,6 +1,6 @@
 import { useAtomValue } from "jotai";
 import { getSelectedCollection } from "../../utils/zotero";
-import { atomFromExternal } from "./jotaiExternal";
+import { atomFromExternal } from "@janbaykara/zotero-jotai-state";
 
 export const selectedCollectionIdAtom = atomFromExternal({
   getSnapshot: () => getSelectedCollection()?.id || null,

@@ -4,7 +4,10 @@
 
 import { useCallback, useMemo } from "preact/hooks";
 import { useAtomValue } from "jotai";
-import { getCachedCollectionById, getCachedItem } from "../../utils/cache";
+import {
+  getCachedCollectionById,
+  getCachedItem,
+} from "@janbaykara/zotero-cache";
 import {
   applyPinnedShelfOrder,
   getPinnedShelfOrder,
@@ -18,7 +21,10 @@ import {
   subscribePinnedChanges,
   type NextUpReading,
 } from "../pinned";
-import { atomFamilyFromExternal, atomFromExternal } from "./jotaiExternal";
+import {
+  atomFamilyFromExternal,
+  atomFromExternal,
+} from "@janbaykara/zotero-jotai-state";
 
 /** Bumps whenever pin tags / shelf order / related items change. */
 let pinnedGeneration = 0;

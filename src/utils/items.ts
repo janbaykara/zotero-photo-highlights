@@ -1,4 +1,4 @@
-import { getCachedItem } from "./cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { compareLocale } from "./locale";
 import { pageIndexForPrintedLabel, readPdfPageLabels } from "./pdfPageLabels";
 import { isPluginManagedCollectionNote } from "./pluginManagedNotes";

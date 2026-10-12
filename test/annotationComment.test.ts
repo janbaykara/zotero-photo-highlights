@@ -2,7 +2,7 @@ import { assert } from "chai";
 import {
   annotationCommentToDisplayHtml,
   annotationCommentToPlainText,
-} from "../src/utils/annotationComment";
+} from "@janbaykara/zotero-annotations";
 
 describe("annotationComment", function () {
   it("renders Zotero inline HTML tags", function () {

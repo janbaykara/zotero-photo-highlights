@@ -1,0 +1,13 @@
+{
+  "name": "@janbaykara/zotero-chrome",
+  "version": "0.1.0",
+  "description": "Typed Zotero chrome content/skin URLs, window features, XUL, and tags-box helpers",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "node ./scripts/generateChromeUrls.mjs"
+  }
+}

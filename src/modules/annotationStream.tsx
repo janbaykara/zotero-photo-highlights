@@ -19,13 +19,13 @@ import {
   openNoteItem,
   readItemNote,
 } from "../utils/items";
-import { getCachedItem } from "../utils/cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import {
   annotationCommentToDisplayHtml,
   annotationCommentToPlainText,
-} from "../utils/annotationComment";
-import { annotationMatchesColorFilter } from "../utils/annotationColors";
-import { DEFAULT_HIGHLIGHT_COLOR } from "../utils/itemHighlights";
+} from "@janbaykara/zotero-annotations";
+import { annotationMatchesColorFilter } from "@janbaykara/zotero-annotations";
+import { DEFAULT_HIGHLIGHT_COLOR } from "@janbaykara/zotero-annotations";
 import { copyStringToClipboard } from "../utils/clipboard";
 import { getItemCitationKey } from "../utils/citeKey";
 import { getString } from "../utils/locale";

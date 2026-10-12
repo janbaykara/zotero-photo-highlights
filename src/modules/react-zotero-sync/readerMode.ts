@@ -10,7 +10,7 @@ import {
   type ViewPrefSpec,
 } from "../../utils/viewPref";
 import * as z from "zod";
-import { getCachedPref, zoteroCache } from "../../utils/cache";
+import { getCachedPref, zoteroCache } from "@janbaykara/zotero-cache";
 
 const readerModeSpec: ViewPrefSpec<boolean> = {
   mapKey: `${config.prefsPrefix}.readerModes`,

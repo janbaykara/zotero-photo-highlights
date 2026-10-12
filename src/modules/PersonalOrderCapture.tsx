@@ -18,14 +18,16 @@ import type { ComponentChildren } from "preact";
 import { twMerge } from "tailwind-merge";
 import {
   clearCoDragElements,
-  DndProvider,
   moveMultipleToContainerEnd,
   resolveDragIds,
   setCoDragElements,
+} from "@janbaykara/zotero-dnd";
+import {
+  DndProvider,
   useDroppable,
   useSortable,
   type DndProviderProps,
-} from "../zotero-dnd";
+} from "@janbaykara/zotero-dnd/preact";
 import { getString } from "../utils/locale";
 import { PERSONAL_ORDER_ITEM_TYPE } from "./personalOrderDnd";
 import { splitPersonalReadingOrder } from "./personalReadingOrder";

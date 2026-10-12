@@ -26,16 +26,18 @@ import { twMerge } from "tailwind-merge";
 import {
   applyMultiDropIndicatorMove,
   clearCoDragElements,
-  DndProvider,
   getDropIndicator,
   isChromeSortable,
   moveMultipleToContainerEnd,
   resolveDragIds,
   setCoDragElements,
-  useDroppable,
   type DropIndicatorOptions,
+} from "@janbaykara/zotero-dnd";
+import {
+  DndProvider,
+  useDroppable,
   type DndProviderProps,
-} from "../zotero-dnd";
+} from "@janbaykara/zotero-dnd/preact";
 import { getString } from "../utils/locale";
 import { PERSONAL_ORDER_ITEM_TYPE } from "./personalOrderDnd";
 import {
@@ -489,7 +491,10 @@ export function PersonalOrderGallery({
         commitOrder(next.ordered);
       }}
     >
-      <div className="syllabus-personal-order-gallery syllabus-personal-order-dnd">
+      <div
+        className="syllabus-personal-order-gallery syllabus-personal-order-dnd"
+        data-zotero-dnd-root
+      >
         <OrderedLandingZone
           keys={containers.ordered}
           itemsByKey={itemsByKey}

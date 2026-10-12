@@ -11,11 +11,12 @@ import {
   ExportSyllabusMetadataSchema,
   SettingsSyllabusMetadata,
 } from "./utils/schemas";
-import { zoteroCache } from "./utils/cache";
+import { zoteroCache } from "@janbaykara/zotero-cache";
 import { FEATURE_FLAG } from "./modules/featureFlags";
 import { stashReadingListFile } from "./modules/readingListFileStash";
 import { registerUserGuideHelpMenu, showUserGuide } from "./modules/userGuide";
 import { migrateCompactModeToItemDensity } from "./modules/react-zotero-sync/itemDensity";
+import { configureWorkspacePackages } from "./utils/configurePackages";
 
 async function onStartup(rootURI: string) {
   await Promise.all([
@@ -25,6 +26,8 @@ async function onStartup(rootURI: string) {
   ]);
 
   initLocale();
+
+  configureWorkspacePackages();
 
   // Initialize cache system
   zoteroCache.initialize();

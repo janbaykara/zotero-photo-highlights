@@ -14,7 +14,7 @@ import { FEATURE_FLAG } from "./featureFlags";
 import { useZoteroSelectedItemIds } from "./react-zotero-sync/selectedItem";
 import { formatReadingDate } from "../utils/dates";
 import { getString } from "../utils/locale";
-import { getCachedCollectionById } from "../utils/cache";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
 import { collectionLibraryIsEditable, isZotero8OrLater } from "../utils/zotero";
 import { TextInput, ReadingDateInput } from "./syllabusInputs";
 import { SyllabusItemCard } from "./SyllabusItemCard";
@@ -408,6 +408,13 @@ export function ClassGroupComponent({
   const tocId =
     classNumber != null ? `toc-class-${classNumber}` : "toc-class-unnumbered";
 
+  // Empty unnumbered: thin in-band hint while dragging (idle layout stays put).
+  const unnumberedDragDropzone =
+    !isLocked &&
+    classNumber == null &&
+    itemAssignments.length === 0 &&
+    draggingIdentifiers.size > 0;
+
   return (
     <div
       id={tocId}
@@ -632,8 +639,18 @@ export function ClassGroupComponent({
             layout === "magazine"
             ? "container-padded"
             : "w-full min-w-0 max-w-full",
+          unnumberedDragDropzone && "relative",
         )}
       >
+        {/* Match thin unnumbered hint height so drag doesn’t push/collapse. */}
+        {unnumberedDragDropzone ? (
+          <div
+            className="invisible pointer-events-none w-full py-1.5 px-3 border-2 border-transparent text-sm in-[.print]:hidden"
+            aria-hidden="true"
+          >
+            {getString("unnumbered-dropzone-hint")}
+          </div>
+        ) : null}
         <SyllabusDndZone
           group={syllabusDndGroup(classNumber)}
           empty={itemAssignments.length === 0}
@@ -653,10 +670,13 @@ export function ClassGroupComponent({
               : density !== "expanded"
                 ? "px-1 pb-1 -mx-1"
                 : "mt-2 px-2 pb-2 -mx-2",
-            // Filled lists: outline the list. Empty classes tint the dashed
-            // hint via group-data-[dropzone-active] (chrome DnD sets the attr).
+            // Filled lists: outline only while a drop is active. A persistent
+            // transparent dashed outline still paints faintly in Gecko.
             itemAssignments.length > 0 &&
-              "data-[dropzone-active='true']:bg-accent-blue/15! data-[dropzone-active='true']:outline-accent-blue! data-[dropzone-active='true']:text-accent-blue! transition-all duration-200 outline-transparent outline-2! outline-dashed!",
+              "data-[dropzone-active='true']:bg-accent-blue/15! data-[dropzone-active='true']:outline-2! data-[dropzone-active='true']:outline-dashed! data-[dropzone-active='true']:outline-accent-blue! data-[dropzone-active='true']:text-accent-blue! transition-colors duration-200",
+            // Sit on the unnumbered band (not above Add link).
+            unnumberedDragDropzone &&
+              "absolute left-0 right-0 top-0 z-30 mx-0! mt-0! px-1! pb-0!",
           )}
           data-density={
             chromeDnd && density !== "expanded" ? "compact" : undefined
@@ -692,20 +712,32 @@ export function ClassGroupComponent({
           onDragOver={isLocked ? undefined : handleItemsDragOver}
           onDragLeave={isLocked ? undefined : handleItemsDragLeave}
         >
-          {!isLocked && itemAssignments.length === 0 && classNumber !== null ? (
+          {!isLocked &&
+          itemAssignments.length === 0 &&
+          // Numbered classes: always. Unnumbered top: only while dragging.
+          (classNumber !== null || unnumberedDragDropzone) ? (
             <div
               className={twMerge(
-                "syllabus-class-dropzone-hint text-center bg-quinary/50 rounded-md p-8 text-secondary border-2 border-dashed border-tertiary/50 in-[.print]:hidden transition-colors duration-200",
+                // border-quinary (not tertiary/50): tertiary is ~30% white and
+                // transition-colors from accent→tertiary flashes pure white in
+                // Gecko when a class loses its last card as the drop ends.
+                "syllabus-class-dropzone-hint text-center bg-quinary/50 rounded-md text-secondary border-2 border-dashed border-quinary in-[.print]:hidden",
                 "group-data-[dropzone-active=true]/class-items:bg-accent-blue/15 group-data-[dropzone-active=true]/class-items:border-accent-blue group-data-[dropzone-active=true]/class-items:text-accent-blue",
-                density !== "expanded" ? "p-4" : "p-8",
+                unnumberedDragDropzone
+                  ? "py-1.5 px-3 text-sm"
+                  : density !== "expanded"
+                    ? "p-4"
+                    : "p-8",
               )}
             >
-              {getString("class-dropzone-hint", {
-                args: {
-                  nomenclature: singularCapitalized,
-                  number: classNumber,
-                },
-              })}
+              {classNumber !== null
+                ? getString("class-dropzone-hint", {
+                    args: {
+                      nomenclature: singularCapitalized,
+                      number: classNumber,
+                    },
+                  })
+                : getString("unnumbered-dropzone-hint")}
             </div>
           ) : itemAssignments.length > 0 && isLocked && layout !== "card" ? (
             <ReadingItemsLayout
@@ -802,7 +834,7 @@ export function ClassGroupComponent({
               })}
             </div>
           ) : null}
-          {!isLocked && (
+          {!isLocked && !unnumberedDragDropzone && (
             <div className="flex items-center justify-center gap-2 w-full opacity-0 group-hover/class:opacity-100 focus-within:opacity-100 focus-visible:opacity-100 transition-opacity in-[.print]:hidden p-2">
               <button
                 type="button"

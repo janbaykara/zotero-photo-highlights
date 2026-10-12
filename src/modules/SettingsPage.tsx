@@ -25,7 +25,7 @@ import {
   getAvailableStyles,
   getStyleName,
   getQuickCopyStyle,
-} from "../utils/cite";
+} from "@janbaykara/zotero-csl";
 import { PrioritiesEditor } from "./PrioritiesEditor";
 import { Priority } from "../utils/schemas";
 import {

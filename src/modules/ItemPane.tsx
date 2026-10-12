@@ -23,7 +23,7 @@ import { classByNumber } from "../utils/schemas";
 import {
   getCachedCollectionById,
   getCachedCollectionByKey,
-} from "../utils/cache";
+} from "@janbaykara/zotero-cache";
 import { useZoteroClassMetadata } from "./react-zotero-sync/classMetadata";
 import { useSyllabusDocumentGeneration } from "./react-zotero-sync/collectionDocument";
 import { usePersonalReadingOrderGeneration } from "./react-zotero-sync/personalReadingOrder";

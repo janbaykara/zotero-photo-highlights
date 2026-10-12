@@ -187,6 +187,10 @@ export default defineConfig({
             },
             { label: "For developers", slug: "developers" },
             {
+              label: "Workspace packages",
+              slug: "developers/packages",
+            },
+            {
               label: "Supporting Gaza’s academic reconstruction",
               slug: "support-gaza",
             },

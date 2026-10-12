@@ -6,8 +6,8 @@ import { getString } from "../utils/locale";
 import {
   annotationMatchesColorFilter,
   collectAnnotationColors,
-} from "../utils/annotationColors";
-import { annotationMatchesTagFilter } from "../utils/annotationTags";
+} from "@janbaykara/zotero-annotations";
+import { annotationMatchesTagFilter } from "@janbaykara/zotero-annotations";
 import { isClassNoteItem, sortItems } from "../utils/items";
 import {
   AnnotationActivityGap,

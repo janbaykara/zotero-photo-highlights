@@ -1,14 +1,14 @@
 import { useCallback, useMemo } from "preact/hooks";
 import { useAtomValue } from "jotai";
-import { getCachedItem } from "../utils/cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { isSyllabusMemberItem } from "../utils/items";
-import { collectAnnotationColors } from "../utils/annotationColors";
-import { readItemAnnotationTags } from "../utils/annotationTags";
+import { collectAnnotationColors } from "@janbaykara/zotero-annotations";
+import { readItemAnnotationTags } from "@janbaykara/zotero-annotations";
 import { getItemTitle } from "../utils/items";
 import {
   DEFAULT_HIGHLIGHT_COLOR,
   normalizeHighlightColor,
-} from "../utils/itemHighlights";
+} from "@janbaykara/zotero-annotations";
 import {
   attachmentForFulltextHit,
   findMatchingParagraphsInFulltext,
@@ -18,7 +18,7 @@ import {
 } from "../utils/fulltextParagraphs";
 import { savedSearchShelfKey, type ExplorerShelf } from "./explorerConfig";
 import { createDebouncedReload } from "../utils/debounceReload";
-import { atomFamilyFromExternal } from "./react-zotero-sync/jotaiExternal";
+import { atomFamilyFromExternal } from "@janbaykara/zotero-jotai-state";
 
 export const EXPLORER_MEDIA_LIMIT = 10;
 export const EXPLORER_RECENTLY_ADDED_LIMIT = 20;

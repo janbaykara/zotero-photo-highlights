@@ -4,7 +4,10 @@
  * collection’s gallery / card views. Edited via Zotero’s built-in note UI.
  */
 
-import { getCachedCollectionById, getCachedItem } from "../utils/cache";
+import {
+  getCachedCollectionById,
+  getCachedItem,
+} from "@janbaykara/zotero-cache";
 import { readItemNote } from "../utils/items";
 import { noteHtmlToDisplayHtml } from "../utils/noteHtml";
 import { noteHtmlToPlainText } from "./pinned";

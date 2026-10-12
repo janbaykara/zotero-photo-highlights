@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
-import { isItemRemovalEvent } from "../../utils/cache";
+import { isItemRemovalEvent } from "@janbaykara/zotero-cache";
 import { isSyllabusAssignableItem } from "../../utils/items";
-import { atomFromExternal } from "./jotaiExternal";
+import { atomFromExternal } from "@janbaykara/zotero-jotai-state";
 
 function arraysEqual(a: number[], b: number[]): boolean {
   return a.length === b.length && a.every((id, i) => id === b[i]);

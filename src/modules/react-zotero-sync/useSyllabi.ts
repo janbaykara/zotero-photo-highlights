@@ -7,7 +7,10 @@ import {
   ItemSyllabusAssignment,
 } from "../syllabus";
 import { getAllCollections } from "../../utils/zotero";
-import { getCachedItem, getCachedCollectionById } from "../../utils/cache";
+import {
+  getCachedItem,
+  getCachedCollectionById,
+} from "@janbaykara/zotero-cache";
 import { isSyllabusMemberItem } from "../../utils/items";
 import {
   getCollectionDocument,
@@ -16,7 +19,7 @@ import {
   getSyllabusCollectionDictionary,
   subscribeToSyllabusDocumentChanges,
 } from "../syllabusNote";
-import { atomFromExternal } from "./jotaiExternal";
+import { atomFromExternal } from "@janbaykara/zotero-jotai-state";
 
 export type SyllabusData = {
   collection: Zotero.Collection;

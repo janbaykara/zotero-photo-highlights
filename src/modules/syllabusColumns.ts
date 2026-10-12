@@ -1,3 +1,4 @@
+import { chromeSkinUrl } from "@janbaykara/zotero-chrome";
 import { getSelectedCollection } from "../utils/zotero";
 import { getPref } from "../utils/prefs";
 import { getReadingTimeSync, formatReadingTime } from "../utils/readingTime";
@@ -48,8 +49,8 @@ export async function registerSyllabusStatusColumn() {
     pluginID: addon.data.config.addonID,
     dataKey: field,
     label: getString("column-status"),
-    // iconLabel: "chrome://zotero/skin/16/universal/checkmark.svg",
-    iconPath: "chrome://zotero/skin/16/universal/tick.svg",
+    // iconLabel: chromeSkinUrl("16/universal/checkmark.svg"),
+    iconPath: chromeSkinUrl("16/universal/tick.svg"),
     width: "100px",
     fixedWidth: true,
     dataProvider: (item: Zotero.Item, dataKey: string) => {

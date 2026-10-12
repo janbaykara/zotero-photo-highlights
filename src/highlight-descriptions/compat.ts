@@ -5,8 +5,8 @@
  * Pref contract:
  * https://github.com/paulMrG2/zotero-highlight-descriptions
  */
-import { getCachedPref } from "../utils/cache";
-import { parseAnnotationColorHex } from "../utils/annotationColors";
+import { getCachedPref } from "@janbaykara/zotero-cache";
+import { parseAnnotationColorHex } from "@janbaykara/zotero-annotations";
 
 const PREF_PREFIX = "extensions.highlightdescriptions";
 

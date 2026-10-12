@@ -1,7 +1,7 @@
 import { useMemo } from "preact/hooks";
 import { useAtomValue } from "jotai";
-import { atomFamilyFromExternal } from "./jotaiExternal";
-import { getCachedItem } from "../../utils/cache";
+import { atomFamilyFromExternal } from "@janbaykara/zotero-jotai-state";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { isSyllabusMemberItem } from "../../utils/items";
 import {
   collectionTreeRowTitle,

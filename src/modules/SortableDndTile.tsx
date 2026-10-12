@@ -8,7 +8,7 @@ import { h } from "preact";
 import type { ComponentChildren } from "preact";
 import { twMerge } from "tailwind-merge";
 import type { Type, UniqueIdentifier } from "@dnd-kit/abstract";
-import { useSortable } from "../zotero-dnd";
+import { useSortable } from "@janbaykara/zotero-dnd/preact";
 
 export function SortableDndTile({
   id,

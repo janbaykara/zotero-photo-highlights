@@ -1,7 +1,7 @@
 /** Publish / unpublish a single library item cover page + shared attachments. */
 
-import { getCachedItem } from "./cache";
-import { generateBibliographicReference } from "./cite";
+import { getCachedItem } from "@janbaykara/zotero-cache";
+import { generateBibliographicReference } from "@janbaykara/zotero-csl";
 import {
   exportItemsAsBibTeX,
   exportItemsAsRis,
@@ -14,7 +14,7 @@ import {
   formatAnnotationCopyText,
   annotationHasCopyText,
 } from "../modules/annotationStream";
-import { annotationCommentToDisplayHtml } from "./annotationComment";
+import { annotationCommentToDisplayHtml } from "@janbaykara/zotero-annotations";
 import {
   annotationsStreamForParent,
   sortAnnotationsByQuoteOrder,
@@ -46,7 +46,7 @@ import {
   rememberPublishedItemUrl,
 } from "./publishItemUrls";
 import { PUBLISH_OG_IMAGE, bytesContentFingerprint } from "./publishOgImage";
-import { generateBibliographyForPrint } from "./cite";
+import { generateBibliographyForPrint } from "@janbaykara/zotero-csl";
 import { loadShareCoverCss } from "./loadPublishViewerAssets";
 import { pickBestPublishAttachment } from "./publishSyllabus";
 import type { PublishTarget } from "./publishTarget";

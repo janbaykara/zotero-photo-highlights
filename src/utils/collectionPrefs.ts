@@ -1,6 +1,6 @@
 import * as z from "zod";
 import { config } from "../../package.json";
-import { getCachedPref, zoteroCache } from "./cache";
+import { getCachedPref, zoteroCache } from "@janbaykara/zotero-cache";
 import { isNamedViewPrefKey, isSpecialViewPrefKey } from "./viewScope";
 import { getAllCollections, zoteroLibraryID } from "./zotero";
 
@@ -21,6 +21,7 @@ export const COLLECTION_ID_PREF_KEYS = [
   `${config.prefsPrefix}.showItemsWithoutAnnotations`,
   `${config.prefsPrefix}.includeAutomaticTags`,
   `${config.prefsPrefix}.showClassNotes`,
+  `${config.prefsPrefix}.showGalleryNotes`,
   `${config.prefsPrefix}.annotationsQuoteOrderByView`,
   `${config.prefsPrefix}.publishUrls`,
   `${config.prefsPrefix}.publishShareOptions`,

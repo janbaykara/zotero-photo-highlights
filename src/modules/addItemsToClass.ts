@@ -1,4 +1,4 @@
-import { getCachedCollectionById } from "../utils/cache";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
 import { pickLibraryItems } from "../utils/itemPicker";
 import { resolveItemsForClassAssignment } from "../utils/items";
 import { collectionLibraryIsEditable } from "../utils/zotero";

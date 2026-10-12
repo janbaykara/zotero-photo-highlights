@@ -3,7 +3,7 @@
  * class) and select it so the native note editor opens.
  */
 
-import { getCachedCollectionById } from "../utils/cache";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
 import { escapeHtml } from "../utils/printSyllabus";
 import {
   collectionLibraryIsEditable,

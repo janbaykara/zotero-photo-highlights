@@ -19,7 +19,7 @@ import {
   getCachedItem,
   getCachedPref,
   zoteroCache,
-} from "../utils/cache";
+} from "@janbaykara/zotero-cache";
 import { compareLocale, getString } from "../utils/locale";
 import {
   getItemTitle,

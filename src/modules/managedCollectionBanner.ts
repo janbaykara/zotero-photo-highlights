@@ -1,3 +1,4 @@
+import { createXULElement } from "@janbaykara/zotero-chrome";
 import { getString } from "../utils/locale";
 import { getSelectedCollection } from "../utils/zotero";
 import {
@@ -53,10 +54,7 @@ function createLockIcon(doc: Document): SVGSVGElement {
 
 function createBanner(doc: Document): HTMLElement {
   // XUL vbox so the items tree flexes around this notice instead of overlaying it.
-  const banner = (
-    doc as Document & { createXULElement: (tag: string) => Element }
-  ).createXULElement("vbox") as HTMLElement;
-  banner.id = BANNER_ID;
+  const banner = createXULElement(doc, "vbox", BANNER_ID) as HTMLElement;
   banner.classList.add("syllabus-managed-folder-banner");
   banner.setAttribute("flex", "0");
   banner.setAttribute("role", "status");

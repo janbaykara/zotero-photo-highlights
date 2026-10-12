@@ -10,7 +10,7 @@ import {
 } from "preact/hooks";
 import type { JSX } from "preact";
 import { twMerge } from "tailwind-merge";
-import { generateBibliographyForPrint } from "../utils/cite";
+import { generateBibliographyForPrint } from "@janbaykara/zotero-csl";
 import { getPref } from "../utils/prefs";
 import { getString, getUiDir, compareLocale } from "../utils/locale";
 import {
@@ -23,8 +23,11 @@ import {
   ItemSyllabusAssignment,
   classByNumber,
 } from "./syllabus";
-import { getCachedItem, getCachedCollectionById } from "../utils/cache";
-import { renderComponent } from "../utils/react";
+import {
+  getCachedItem,
+  getCachedCollectionById,
+} from "@janbaykara/zotero-cache";
+import { renderComponent } from "@janbaykara/zotero-preact";
 import { useZoteroCollectionTitle } from "./react-zotero-sync/collectionTitle";
 import { useZoteroSyllabusMetadata } from "./react-zotero-sync/syllabusMetadata";
 import { useZoteroCollectionItems } from "./react-zotero-sync/collectionItems";
@@ -425,8 +428,6 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
     [syllabusItems],
   );
 
-  // Track drag state for showing "Add to Class X" dropzone
-  const [isDragging, setIsDragging] = useState(false);
   const [dropIndicator, setDropIndicator] = useState<ItemDropIndicator | null>(
     null,
   );
@@ -953,7 +954,6 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
   // Set up global drag event listeners
   useEffect(() => {
     const clearDragUi = () => {
-      setIsDragging(false);
       setDropIndicator(null);
       setDraggingIdentifiers(new Set());
       setDraggingSourceClass(null);
@@ -968,7 +968,6 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
       if (!card) {
         return;
       }
-      setIsDragging(true);
       const identifier = card.dataset.syllabusIdentifier;
       if (identifier) {
         const selected = selectedIdentifiersRef.current;
@@ -1431,17 +1430,13 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
     e.preventDefault();
     e.stopPropagation();
 
-    // Remove the dropzone active class after drop
-    // e.currentTarget.classList.remove("syllabus-dropzone-active");
-    const allDropzones = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-dropzone-active='true']"),
-    ) as HTMLElement[];
-    for (const dropzone of allDropzones) {
-      if (dropzone?.dataset?.dropzoneActive) {
-        dropzone.dataset.dropzoneActive = "false";
-      }
+    // Clear dropzone-active after drop (remove attr — "false" can leave stale CSS).
+    for (const node of Array.from(
+      document.querySelectorAll("[data-dropzone-active]"),
+    )) {
+      delete (node as HTMLElement).dataset.dropzoneActive;
     }
-    e.currentTarget.dataset.dropzoneActive = "false";
+    delete e.currentTarget.dataset.dropzoneActive;
     setDropIndicator(null);
 
     const payload = syllabusPayloadFromDataTransfer(e.dataTransfer);
@@ -2270,8 +2265,7 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
     // Only remove the class if we're actually leaving the drop zone
     // (not just moving to a child element)
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      // e.currentTarget.classList.remove("syllabus-dropzone-active");
-      e.currentTarget.dataset.dropzoneActive = "false";
+      delete e.currentTarget.dataset.dropzoneActive;
     }
   };
 
@@ -2740,9 +2734,7 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
               identifierContainers={syllabusIdentifierContainers}
               selectedIdentifiers={selectedIdentifiers}
               syllabusItems={syllabusItems}
-              nextClassNumber={nextClassNumber}
               onDragActivity={(dragging) => {
-                setIsDragging(dragging);
                 if (!dragging) {
                   setDropIndicator(null);
                   setDraggingIdentifiers(new Set());
@@ -2858,42 +2850,6 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
                           </div>
                         </div>
                       )}
-
-                      {!isLocked &&
-                        (isDragging || fileDrop.isDraggingFile) &&
-                        density === "expanded" && (
-                          <div className="syllabus-class-group syllabus-add-class-dropzone in-[.print]:hidden">
-                            <div className="syllabus-class-header-container">
-                              <div className="syllabus-class-header">
-                                {getString("page-add-to-class", {
-                                  args: {
-                                    nomenclature: singularCapitalized,
-                                    number: nextClassNumber,
-                                  },
-                                })}
-                              </div>
-                            </div>
-                            <SyllabusDndZone
-                              group={syllabusDndGroup(nextClassNumber)}
-                              empty
-                              className="syllabus-class-items syllabus-add-class-dropzone-items"
-                              data-syllabus-file-drop="class"
-                              data-syllabus-class-number={nextClassNumber}
-                              onDrop={(e) => handleDrop(e, nextClassNumber)}
-                              onDragOver={handleDragOver}
-                              onDragLeave={handleDragLeave}
-                            >
-                              <div className="syllabus-add-class-dropzone-placeholder bg-quinary rounded-md p-16 text-secondary border-2 border-dashed border-secondary">
-                                {getString("page-drop-create-class", {
-                                  args: {
-                                    nomenclature: singularCapitalized,
-                                    number: nextClassNumber,
-                                  },
-                                })}
-                              </div>
-                            </SyllabusDndZone>
-                          </div>
-                        )}
 
                       {!isLocked && !hasNoClasses && (
                         <div className="syllabus-create-class-control in-[.print]:hidden">
@@ -3014,7 +2970,7 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
                       group={syllabusDndGroup(null, "further-reading")}
                       empty={furtherReadingItems.length === 0}
                       className={twMerge(
-                        "syllabus-class-items box-border! rounded-lg",
+                        "syllabus-class-items box-border! rounded-lg group/class-items",
                         syllabusChromeDnd
                           ? twMerge(
                               "syllabus-dnd-item-list",
@@ -3023,7 +2979,8 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
                           : density !== "expanded"
                             ? "p-1 -m-1"
                             : "p-2 -m-2",
-                        "data-[dropzone-active='true']:bg-accent-blue/15! data-[dropzone-active='true']:outline-accent-blue! data-[dropzone-active='true']:text-accent-blue! transition-all duration-200 outline-transparent outline-2! outline-dashed!",
+                        furtherReadingItems.length > 0 &&
+                          "data-[dropzone-active='true']:bg-accent-blue/15! data-[dropzone-active='true']:outline-2! data-[dropzone-active='true']:outline-dashed! data-[dropzone-active='true']:outline-accent-blue! data-[dropzone-active='true']:text-accent-blue! transition-colors duration-200",
                       )}
                       data-density={
                         syllabusChromeDnd && density !== "expanded"
@@ -3136,7 +3093,19 @@ function CollectionSyllabusPage({ collectionId }: SyllabusPageProps) {
                             }
                       }
                     >
-                      {isLocked && effectiveLayout !== "card" ? (
+                      {!isLocked &&
+                      furtherReadingItems.length === 0 &&
+                      draggingIdentifiers.size > 0 ? (
+                        <div
+                          className={twMerge(
+                            "syllabus-class-dropzone-hint text-center bg-quinary/50 rounded-md p-8 text-secondary border-2 border-dashed border-quinary in-[.print]:hidden",
+                            "group-data-[dropzone-active=true]/class-items:bg-accent-blue/15 group-data-[dropzone-active=true]/class-items:border-accent-blue group-data-[dropzone-active=true]/class-items:text-accent-blue",
+                            density !== "expanded" ? "p-4" : "p-8",
+                          )}
+                        >
+                          {getString("further-reading-dropzone-hint")}
+                        </div>
+                      ) : isLocked && effectiveLayout !== "card" ? (
                         <ReadingItemsLayout
                           layout={effectiveLayout}
                           density={density}

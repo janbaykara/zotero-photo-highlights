@@ -2,9 +2,9 @@ import { useCallback } from "preact/hooks";
 import { useAtomValue } from "jotai";
 import * as z from "zod";
 import { config } from "../../package.json";
-import { getCachedPref, zoteroCache } from "../utils/cache";
-import { subscribePref } from "../utils/prefSubscribe";
-import { atomFromExternal } from "./react-zotero-sync/jotaiExternal";
+import { getCachedPref, zoteroCache } from "@janbaykara/zotero-cache";
+import { subscribePref } from "@janbaykara/zotero-jotai-state";
+import { atomFromExternal } from "@janbaykara/zotero-jotai-state";
 import {
   GALLERY_LAYOUT_MODES,
   coerceGalleryLayout,

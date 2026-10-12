@@ -11,7 +11,7 @@ import {
 import {
   annotationSwatchUsesDarkMark,
   toggleAnnotationColorFilter,
-} from "../utils/annotationColors";
+} from "@janbaykara/zotero-annotations";
 import {
   colorFilterInheritsDefault,
   useAnnotationColorFilter,

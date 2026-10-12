@@ -1,4 +1,4 @@
-import { getCachedCollectionById } from "./cache";
+import { getCachedCollectionById } from "@janbaykara/zotero-cache";
 
 /**
  * Compare the running Zotero app version against a major.minor.patch target.

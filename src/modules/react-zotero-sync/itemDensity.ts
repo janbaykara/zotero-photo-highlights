@@ -12,7 +12,7 @@ import {
   type ViewPrefGlobalSetting,
   type ViewPrefSpec,
 } from "../../utils/viewPref";
-import { atomFromExternal } from "./jotaiExternal";
+import { atomFromExternal } from "@janbaykara/zotero-jotai-state";
 
 export const ITEM_DENSITIES = ["row", "standard", "expanded"] as const;
 

@@ -15,15 +15,15 @@ import {
   getCachedItem,
   isItemRemovalEvent,
   isObjectLifecycleEvent,
-} from "../../utils/cache";
-import { subscribePref } from "../../utils/prefSubscribe";
+} from "@janbaykara/zotero-cache";
+import { subscribePref } from "@janbaykara/zotero-jotai-state";
 import {
   getCollectionDocument,
   getDocumentGeneration,
   getHydratedItemAssignments,
   subscribeToSyllabusDocumentChanges,
 } from "../syllabusNote";
-import { atomFamilyFromExternal } from "./jotaiExternal";
+import { atomFamilyFromExternal } from "@janbaykara/zotero-jotai-state";
 
 /** Snapshot only needs ids — live `Zotero.Item`s are resolved from the cache. */
 export type CollectionItemsSnapshot = {

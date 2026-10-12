@@ -6,8 +6,11 @@ import {
   getSyllabusNoteId,
   subscribeToSyllabusDocumentChanges,
 } from "../syllabusNote";
-import { getCachedItem } from "../../utils/cache";
-import { atomFamilyFromExternal, atomFromExternal } from "./jotaiExternal";
+import { getCachedItem } from "@janbaykara/zotero-cache";
+import {
+  atomFamilyFromExternal,
+  atomFromExternal,
+} from "@janbaykara/zotero-jotai-state";
 
 export const documentGenerationAtom = atomFromExternal({
   getSnapshot: () => getDocumentGeneration(),

@@ -3,7 +3,7 @@ import {
   readGalleryNoteHtml,
   subscribeGalleryNoteChanges,
 } from "./galleryNote";
-import { atomFamilyFromExternal } from "./react-zotero-sync/jotaiExternal";
+import { atomFamilyFromExternal } from "@janbaykara/zotero-jotai-state";
 
 type GalleryNoteKey = { itemId: number; collectionId: number };
 

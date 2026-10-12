@@ -10,7 +10,7 @@ import {
   getGlobalDefaultPriorities,
   setGlobalDefaultPriorities,
 } from "./defaultPriorities";
-import { openPreactDialog } from "../utils/preactDialog";
+import { openPreactDialog } from "@janbaykara/zotero-preact";
 
 function GlobalPrioritiesDialogBody() {
   const [priorities, setPriorities] = useState<Priority[]>(() =>

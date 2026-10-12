@@ -9,15 +9,15 @@ import {
 } from "./galleryGroupBy";
 import { coerceGallerySortBy, type GallerySortBy } from "./gallerySort";
 import { getPref, getPrefKey, setPref } from "../utils/prefs";
-import { getCachedPref, zoteroCache } from "../utils/cache";
+import { getCachedPref, zoteroCache } from "@janbaykara/zotero-cache";
 import {
   parseAnnotationColorFilter,
   serializeAnnotationColorFilter,
-} from "../utils/annotationColors";
+} from "@janbaykara/zotero-annotations";
 import {
   parseAnnotationTagFilter,
   serializeAnnotationTagFilter,
-} from "../utils/annotationTags";
+} from "@janbaykara/zotero-annotations";
 import {
   coerceAnnotationsQuoteOrder,
   coerceMyAnnotationsSearchScope,

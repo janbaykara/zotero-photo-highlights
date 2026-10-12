@@ -58,6 +58,8 @@ Click a Gallery note on a card, cover, or preview tile to open it. Right-click �
 
 How it looks: under the title on **Card**; in the sidecar on **Preview**; beside the cover in **Cover**; still on the item in **Annotations**.
 
+Use Gallery **View options → Show personal notes** to hide or show these captions without deleting them. The setting is per collection (same pattern as **Show checkboxes**).
+
 ## Print, export, and share
 
 Use the globe icon in the Gallery header to **Publish online…**. You can also right-click the collection → **Share via URL**. The share wizard can publish as a personal reading list (mirroring Gallery view options) or as a syllabus when the collection has one. Checkboxes, read status, and Gallery notes stay private. (Syllabus view still has the printer menu for PDF / Word / Markdown / HTML.) Details: [Print, export, and publish](/zotero-syllabus/how-to/print-export-publish/).

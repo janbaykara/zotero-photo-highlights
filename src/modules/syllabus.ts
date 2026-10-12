@@ -40,7 +40,8 @@ import {
   canShareCollectionViaUrl,
   shareCollectionViaUrl,
 } from "../utils/shareCollectionViaUrl";
-import { renderComponent, unmountComponent } from "../utils/react";
+import { chromeSkinUrl, createXULElement } from "@janbaykara/zotero-chrome";
+import { renderComponent, unmountComponent } from "@janbaykara/zotero-preact";
 import { ItemPane } from "./ItemPane";
 import { openAddToClassDialog } from "./openAddToClassDialog";
 import {
@@ -58,7 +59,7 @@ import { getPref } from "../utils/prefs";
 import { ReadingSchedule } from "./ReadingSchedule";
 import { MyAnnotationsPage } from "./MyAnnotationsPage";
 import { parseXULTemplate } from "../utils/ui";
-import { TabManager } from "../utils/tabManager";
+import { TabManager } from "@janbaykara/zotero-preact";
 import { FEATURE_FLAG } from "./featureFlags";
 import {
   isPinnedItem,
@@ -126,7 +127,7 @@ import {
   getCachedCollectionById,
   getCachedCollectionByKey,
   zoteroCache,
-} from "../utils/cache";
+} from "@janbaykara/zotero-cache";
 import {
   absorbSyllabusExtraFromItems,
   getCollectionDocument,
@@ -343,8 +344,6 @@ function migrateLegacyBrowseViewMode(
   return true;
 }
 
-const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
-
 function isPinnedSyllabusNoteCandidate(item: Zotero.Item): boolean {
   try {
     return (
@@ -385,16 +384,6 @@ function syllabusViewModeChrome(): { label: string; tooltip: string } | null {
   return null;
 }
 
-function createXulElement(doc: Document, tag: string, id: string): Element {
-  const xulDoc = doc as Document & {
-    createXULElement?: (tag: string) => Element;
-  };
-  const el = xulDoc.createXULElement
-    ? xulDoc.createXULElement(tag)
-    : doc.createElementNS(XUL_NS, tag);
-  el.id = id;
-  return el;
-}
 
 function confirmEnableSubcollections(
   collectionId: number | GetByLibraryAndKeyArgs,
@@ -1534,7 +1523,7 @@ export class SyllabusManager {
       attributes: {
         crop: "none",
         tooltiptext: tooltip,
-        image: "chrome://zotero/skin/16/universal/attachment-annotations.svg",
+        image: chromeSkinUrl("16/universal/attachment-annotations.svg"),
       },
       properties: {
         label: getString("view-tab-my-annotations"),
@@ -1737,7 +1726,7 @@ export class SyllabusManager {
     );
     const radiosToBuild = showViewRadios ? viewModeOptions : [];
 
-    const group = createXulElement(doc, "hbox", "syllabus-view-mode-group");
+    const group = createXULElement(doc, "hbox", "syllabus-view-mode-group");
     group.setAttribute("align", "stretch");
 
     for (const option of radiosToBuild) {
@@ -1795,7 +1784,7 @@ export class SyllabusManager {
       ],
     });
 
-    const cluster = createXulElement(doc, "hbox", "syllabus-view-mode-cluster");
+    const cluster = createXULElement(doc, "hbox", "syllabus-view-mode-cluster");
     cluster.setAttribute("align", "center");
     cluster.setAttribute("flex", "0");
     if (showViewRadios) {
@@ -1803,13 +1792,13 @@ export class SyllabusManager {
     }
     cluster.appendChild(createButton);
 
-    const spacerStart = createXulElement(
+    const spacerStart = createXULElement(
       doc,
       "spacer",
       "syllabus-view-spacer-start",
     );
     spacerStart.setAttribute("flex", "1");
-    const spacerEnd = createXulElement(
+    const spacerEnd = createXULElement(
       doc,
       "spacer",
       "syllabus-view-spacer-end",
@@ -2247,11 +2236,11 @@ export class SyllabusManager {
       pluginID: addon.data.config.addonID,
       header: {
         l10nID: getLocaleID("item-section-syllabus-head-text"),
-        icon: "chrome://zotero/skin/16/universal/book.svg",
+        icon: chromeSkinUrl("16/universal/book.svg"),
       },
       sidenav: {
         l10nID: getLocaleID("item-section-syllabus-sidenav-tooltip"),
-        icon: "chrome://zotero/skin/16/universal/book.svg",
+        icon: chromeSkinUrl("16/universal/book.svg"),
       },
       onRender: ({ body, editable }) => {
         const win = Zotero.getMainWindow();
@@ -2282,11 +2271,11 @@ export class SyllabusManager {
       pluginID: addon.data.config.addonID,
       header: {
         l10nID: getLocaleID("item-section-share-head-text"),
-        icon: "chrome://zotero/skin/16/universal/link.svg",
+        icon: chromeSkinUrl("16/universal/link.svg"),
       },
       sidenav: {
         l10nID: getLocaleID("item-section-share-sidenav-tooltip"),
-        icon: "chrome://zotero/skin/16/universal/link.svg",
+        icon: chromeSkinUrl("16/universal/link.svg"),
       },
       onItemChange: ({ item, setEnabled }) => {
         try {
@@ -2477,7 +2466,7 @@ export class SyllabusManager {
       tag: "menu",
       id: "syllabus-set-priority-menu",
       label: getString("menu-set-priority"),
-      icon: "chrome://zotero/skin/16/universal/book.svg",
+      icon: chromeSkinUrl("16/universal/book.svg"),
       isHidden: () => !this.selectionHasRegularItem(),
       children: priorityOptions
         .map((opt) => {
@@ -2509,7 +2498,7 @@ export class SyllabusManager {
     ztoolkit.Menu.register("item", {
       tag: "menu",
       id: "syllabus-reassign-class-number-menu",
-      icon: "chrome://zotero/skin/16/universal/book.svg",
+      icon: chromeSkinUrl("16/universal/book.svg"),
       label: getString("menu-assign-to-class"),
       children: SyllabusManager.buildClassNumberChildren(),
     });
@@ -2662,7 +2651,7 @@ export class SyllabusManager {
       tag: "menu",
       id: "syllabus-set-status-menu",
       label: getString("menu-set-reading-status"),
-      icon: "chrome://zotero/skin/16/universal/tick.svg",
+      icon: chromeSkinUrl("16/universal/tick.svg"),
       isHidden: () => !this.selectionHasRegularItem(),
       children: [
         {
@@ -2721,7 +2710,7 @@ export class SyllabusManager {
       tag: "menuitem",
       id: "syllabus-personal-reading-order-menu",
       label: getString("personal-reading-order-menu-add"),
-      icon: "chrome://zotero/skin/16/universal/list-number.svg",
+      icon: chromeSkinUrl("16/universal/list-number.svg"),
       isHidden: () => {
         if (!isOptionalFeatureEnabled("gallery")) {
           return true;
@@ -2806,7 +2795,7 @@ export class SyllabusManager {
       }
     };
 
-    const pinIcon = "chrome://zotero/skin/16/universal/pin.svg";
+    const pinIcon = chromeSkinUrl("16/universal/pin.svg");
     // Data URI: extension chrome:// SVGs often fail as menuitem list-style-image.
     const pinOffIcon = `data:image/svg+xml,${encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M9.45442 0.747313C8.91526 0.208154 7.99526 0.446553 7.78579 1.1797L7.07966 3.65115L0.896869 6.74255C0.286372 7.04779 0.154333 7.86144 0.636975 8.34408L3.79293 11.5L0 15.2929L9.87947e-05 16L0.707182 16L4.50004 12.2071L7.65592 15.363C8.13856 15.8457 8.9522 15.7136 9.25745 15.1031L12.3488 8.92033L14.8203 8.21421C15.5534 8.00474 15.7918 7.08473 15.2527 6.54558L9.45442 0.747313ZM8.74732 1.45442L14.5456 7.25268L11.8626 8.01924L11.6512 8.07966L11.5528 8.27639L8.36302 14.6559L1.34408 7.63697L7.72361 4.44721L7.92034 4.34885L7.98076 4.13736L8.74732 1.45442Z" fill="context-fill"/><path d="M1.4 2.8 2.8 1.4 14.6 13.2 13.2 14.6Z" fill="context-fill"/></svg>`,
@@ -2983,7 +2972,7 @@ export class SyllabusManager {
       tag: "menuitem",
       id: "syllabus-item-share-via-url-menu",
       label: getString("item-share-via-url"),
-      icon: "chrome://zotero/skin/16/universal/link.svg",
+      icon: chromeSkinUrl("16/universal/link.svg"),
       isHidden: () => !selectedShareable(),
       commandListener: () => {
         const item = selectedShareable();
@@ -3017,7 +3006,7 @@ export class SyllabusManager {
       tag: "menuitem",
       id: "syllabus-collection-share-via-url-menu",
       label: getString("item-share-via-url"),
-      icon: "chrome://zotero/skin/16/universal/link.svg",
+      icon: chromeSkinUrl("16/universal/link.svg"),
       isHidden: () => {
         const collection = getSelectedCollection();
         if (!canShareCollectionViaUrl(collection)) return true;
@@ -3074,7 +3063,7 @@ export class SyllabusManager {
       tag: "menuitem",
       id: "syllabus-gallery-note-edit-menu",
       label: getString("gallery-note-edit"),
-      icon: "chrome://zotero/skin/16/universal/note.svg",
+      icon: chromeSkinUrl("16/universal/note.svg"),
       isHidden: () => {
         if (!isOptionalFeatureEnabled("gallery")) {
           return true;
@@ -3117,7 +3106,7 @@ export class SyllabusManager {
       tag: "menuitem",
       id: "syllabus-gallery-note-remove-menu",
       label: getString("gallery-note-remove"),
-      icon: "chrome://zotero/skin/16/universal/trash.svg",
+      icon: chromeSkinUrl("16/universal/trash.svg"),
       isHidden: () => {
         if (!isOptionalFeatureEnabled("gallery")) {
           return true;
@@ -3149,7 +3138,7 @@ export class SyllabusManager {
     ztoolkit.Menu.unregister("syllabus-add-collection-shelf-menu");
 
     // Same chrome://zotero pattern as pin — data/extension URLs don't show on Mac menuitems.
-    const homeIcon = "chrome://zotero/skin/16/universal/library.svg";
+    const homeIcon = chromeSkinUrl("16/universal/library.svg");
 
     ztoolkit.Menu.register("collection", {
       tag: "menuitem",

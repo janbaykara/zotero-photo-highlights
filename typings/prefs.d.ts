@@ -40,6 +40,7 @@ declare namespace _ZoteroTypes {
       "annotationsQuoteOrder": string;
       "galleryShowItemsWithoutAnnotations": boolean;
       "galleryIncludeAutomaticTags": boolean;
+      "galleryShowNotes": boolean;
       "syllabusShowClassNotes": boolean;
       "magazineTypeSize": string;
       "magazinePacking": string;

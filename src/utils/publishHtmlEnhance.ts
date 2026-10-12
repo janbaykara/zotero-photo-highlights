@@ -1,6 +1,14 @@
-import { generateBibliographicReference } from "./cite";
-import { getCachedItem } from "./cache";
+import { generateBibliographicReference } from "@janbaykara/zotero-csl";
+import { getCachedItem } from "@janbaykara/zotero-cache";
+import { chromeSkinUrl, isZoteroSkinPath } from "@janbaykara/zotero-chrome";
 import type { ItemDensity } from "../modules/react-zotero-sync/itemDensity";
+
+function itemTypeIconChromeUrl(size: 16 | 28, slug: string): string {
+  const path = `item-type/${size}/light/${slug}.svg`;
+  return isZoteroSkinPath(path)
+    ? chromeSkinUrl(path)
+    : `chrome://zotero/skin/${path}`;
+}
 
 function itemTypeToIconSlug(itemType: string): string {
   return itemType
@@ -44,16 +52,13 @@ async function svgForItemType(
   if (iconSvgCache.has(cacheKey)) {
     return iconSvgCache.get(cacheKey) || null;
   }
-  const url = `chrome://zotero/skin/item-type/${size}/light/${slug}.svg`;
-  let svg = await readChromeText(url);
+  let svg = await readChromeText(itemTypeIconChromeUrl(size, slug));
   if (!svg && size === 28) {
-    svg = await readChromeText(
-      `chrome://zotero/skin/item-type/16/light/${slug}.svg`,
-    );
+    svg = await readChromeText(itemTypeIconChromeUrl(16, slug));
   }
   if (!svg) {
     svg = await readChromeText(
-      `chrome://zotero/skin/item-type/16/light/document.svg`,
+      chromeSkinUrl("item-type/16/light/document.svg"),
     );
   }
   iconSvgCache.set(cacheKey, svg);

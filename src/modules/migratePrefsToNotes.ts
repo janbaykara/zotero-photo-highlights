@@ -19,7 +19,7 @@ import {
   getCachedCollectionById,
   getCachedCollectionByKey,
   zoteroCache,
-} from "../utils/cache";
+} from "@janbaykara/zotero-cache";
 import {
   absorbSyllabusExtraFromItems,
   mutateCollectionDocument,

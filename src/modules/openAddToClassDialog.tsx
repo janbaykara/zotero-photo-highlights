@@ -8,7 +8,7 @@ import { isTestEnv } from "../utils/env";
 import {
   openPreactDialog,
   type PreactDialogHandle,
-} from "../utils/preactDialog";
+} from "@janbaykara/zotero-preact";
 import {
   addItemsToClass,
   buildAddToClassGroups,

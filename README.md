@@ -6,7 +6,7 @@ A Zotero add-on / plugin for course syllabi and personal reading lists. **Syllab
 
 **Documentation:** [janbaykara.github.io/zotero-syllabus](https://janbaykara.github.io/zotero-syllabus/) (also **Help → Zotero Syllabus Documentation** in the app).
 
-Changing the plugin? Architecture, storage, and local development are in **[doc/TECHNICAL.md](doc/TECHNICAL.md)**. UI strings must go through Fluent (`addon/locale/`); see the [localization](doc/TECHNICAL.md#localization) section.
+Changing the plugin? Architecture, storage, and local development are in **[doc/TECHNICAL.md](doc/TECHNICAL.md)**. Shared chrome libraries (DnD, Preact host, Jotai state, cache, …): [docs → Workspace packages](https://janbaykara.github.io/zotero-syllabus/developers/packages/) and **[packages/README.md](packages/README.md)**. UI strings must go through Fluent (`addon/locale/`); see the [localization](doc/TECHNICAL.md#localization) section.
 
 ## How to install
 

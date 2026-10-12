@@ -9,7 +9,10 @@
  */
 
 import * as z from "zod";
-import { getCachedCollectionById, getCachedItem } from "../utils/cache";
+import {
+  getCachedCollectionById,
+  getCachedItem,
+} from "@janbaykara/zotero-cache";
 import { getItemTitle, readItemNote } from "../utils/items";
 import { PERSONAL_READING_ORDER_NOTE_TAG } from "../utils/pluginManagedNotes";
 import { createReentrantSerialQueue } from "../utils/serialQueue";
@@ -752,7 +755,7 @@ async function mutatePersonalReadingOrderDocument(
   const ref = collectionRefFromCollection(collection);
   return orderWrites.enqueue(ref, async () => {
     const liveKeys = liveKeysInCollection(collection);
-    let document = normalizePersonalReadingOrderDocument(
+    const document = normalizePersonalReadingOrderDocument(
       cachedDocumentFor(collection),
       liveKeys,
     );

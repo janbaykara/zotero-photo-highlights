@@ -9,14 +9,14 @@ import { useCallback, useContext, useMemo, useRef } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import {
   clearCoDragElements,
-  DndProvider,
   getDropIndicator,
   isChromeSortable,
   resolveDragIds,
   RestrictToVerticalAxis,
   setCoDragElements,
   type DropIndicatorOptions,
-} from "../zotero-dnd";
+} from "@janbaykara/zotero-dnd";
+import { DndProvider } from "@janbaykara/zotero-dnd/preact";
 import type { UniqueIdentifier } from "@dnd-kit/abstract";
 import {
   buildSyllabusDragPayload,
@@ -26,7 +26,6 @@ import {
   assignmentIdFromSyllabusIdentifier,
   itemIdFromSyllabusIdentifier,
   parseSyllabusDndGroup,
-  syllabusDndZoneId,
 } from "./syllabusDnd";
 
 type SyllabusPageDndContextValue = {
@@ -69,7 +68,6 @@ export function SyllabusPageDnd({
   identifierContainers,
   selectedIdentifiers,
   syllabusItems,
-  nextClassNumber,
   onDragActivity,
   onDragStartMeta,
   onDropPayload,
@@ -82,7 +80,6 @@ export function SyllabusPageDnd({
     zoteroItem: Zotero.Item;
     assignments: Array<{ id?: string }>;
   }>;
-  nextClassNumber: number;
   onDragActivity?: (dragging: boolean) => void;
   onDragStartMeta?: (meta: {
     identifiers: Set<string>;
@@ -108,10 +105,6 @@ export function SyllabusPageDnd({
         return null;
       }
       const operationTargetId = String((target as { id?: unknown }).id ?? "");
-
-      if (operationTargetId === syllabusDndZoneId(`class:${nextClassNumber}`)) {
-        return { targetClassNumber: nextClassNumber };
-      }
 
       if (operationTargetId.startsWith("zone:")) {
         const group = operationTargetId.slice("zone:".length);
@@ -167,7 +160,7 @@ export function SyllabusPageDnd({
         insertBefore,
       };
     },
-    [nextClassNumber, syllabusItems],
+    [syllabusItems],
   );
 
   const handleDragEnd = useCallback(
@@ -300,7 +293,9 @@ export function SyllabusPageDnd({
           void handleDragEnd(event, manager);
         }}
       >
-        <div className="syllabus-page-dnd min-w-0">{children}</div>
+        <div className="syllabus-page-dnd min-w-0" data-zotero-dnd-root>
+          {children}
+        </div>
       </DndProvider>
     </SyllabusPageDndContext.Provider>
   );

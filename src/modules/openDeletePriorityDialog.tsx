@@ -4,7 +4,7 @@ import { useState } from "preact/hooks";
 import { twMerge } from "tailwind-merge";
 import { getString, getUiDir } from "../utils/locale";
 import { Priority } from "../utils/schemas";
-import { openPreactDialogAsync } from "../utils/preactDialog";
+import { openPreactDialogAsync } from "@janbaykara/zotero-preact";
 
 export type DeletePriorityDialogResult =
   | { action: "migrate"; targetId: string }

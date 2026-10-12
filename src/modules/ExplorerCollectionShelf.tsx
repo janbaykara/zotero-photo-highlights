@@ -2,7 +2,7 @@
 import { h, Fragment } from "preact";
 import { useMemo } from "preact/hooks";
 import { twMerge } from "tailwind-merge";
-import { getCachedItem } from "../utils/cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { sortItems } from "../utils/items";
 import { formatReadingDate } from "../utils/dates";
 import { getString } from "../utils/locale";

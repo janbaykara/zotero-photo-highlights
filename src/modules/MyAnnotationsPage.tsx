@@ -14,10 +14,10 @@ import { twMerge } from "tailwind-merge";
 import { isZotero8OrLater } from "../utils/zotero";
 import { getString, getUiDir } from "../utils/locale";
 import { openZoteroItemContextMenu } from "../utils/itemContextMenu";
-import { renderComponent } from "../utils/react";
+import { renderComponent } from "@janbaykara/zotero-preact";
 import { useDebouncedEffect } from "../utils/react/useDebouncedEffect";
-import { annotationMatchesColorFilter } from "../utils/annotationColors";
-import { annotationMatchesTagFilter } from "../utils/annotationTags";
+import { annotationMatchesColorFilter } from "@janbaykara/zotero-annotations";
+import { annotationMatchesTagFilter } from "@janbaykara/zotero-annotations";
 import {
   ANNOTATION_COLOR_FILTER_FEED,
   ANNOTATION_TAG_FILTER_FEED,
@@ -148,7 +148,9 @@ function captureAnnotationScrollAnchor(
   container: HTMLElement,
 ): Exclude<ScrollAnchor, { kind: "live" }> {
   const containerTop = container.getBoundingClientRect().top;
-  const nodes = container.querySelectorAll<HTMLElement>("[data-annotation-id]");
+  const nodes = Array.from(
+    container.querySelectorAll("[data-annotation-id]"),
+  ) as HTMLElement[];
   for (const node of nodes) {
     const id = node.getAttribute("data-annotation-id");
     if (!id) {

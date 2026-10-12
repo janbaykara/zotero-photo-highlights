@@ -1,0 +1,13 @@
+{
+  "name": "@janbaykara/zotero-annotations",
+  "version": "0.1.0",
+  "description": "Annotation colors, tags, comments, batch ops, and highlight samples for Zotero",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@janbaykara/zotero-cache": "workspace:*"
+  }
+}

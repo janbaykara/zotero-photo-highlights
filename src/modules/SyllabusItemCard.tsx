@@ -6,9 +6,9 @@ import { twMerge } from "tailwind-merge";
 import { Pencil } from "lucide-preact";
 import { SyllabusManager, ItemSyllabusAssignment } from "./syllabus";
 import type { Priority } from "../utils/schemas";
-import { getCachedItem } from "../utils/cache";
+import { getCachedItem } from "@janbaykara/zotero-cache";
 import { getPref } from "../utils/prefs";
-import { generateBibliographicReference } from "../utils/cite";
+import { generateBibliographicReference } from "@janbaykara/zotero-csl";
 import { isZotero8OrLater } from "../utils/zotero";
 import { useZoteroSyllabusMetadata } from "./react-zotero-sync/syllabusMetadata";
 import { NoteHtml } from "./NoteHtml";
@@ -750,12 +750,8 @@ export function SyllabusItemCard({
             "absolute right-full mr-1 w-4 h-4 cursor-pointer shrink-0 in-[.print]:hidden",
             isZotero8OrLater() ? "md:mr-2!" : "mr-2!",
           )}
-          // Row: center on the single-line row. Taller cards: pin to the icon/title band.
-          style={
-            density === "row"
-              ? { top: "50%", transform: "translateY(-50%)" }
-              : { top: "0.35rem" }
-          }
+          // Pin to the icon/title band — not 50% of the card (notes/meta make rows taller).
+          style={{ top: "calc(0.35rem - 1px)" }}
           title={
             onReaderCheck
               ? getString("pinned-done-unpin-title")

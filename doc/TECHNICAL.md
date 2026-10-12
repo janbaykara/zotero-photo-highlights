@@ -62,6 +62,8 @@ The note is created lazily on first mutation. Startup migrates legacy `assignmen
 
 **Show checkboxes** is a collection-scoped view pref (`readerModes.<collectionId>`), shared by Syllabus and Gallery. Gallery’s settings menu exposes the same toggle.
 
+**Show personal notes** (Gallery) is a collection-scoped view pref (`showGalleryNotes.<collectionId>`, default `galleryShowNotes`). When off, collection-scoped Gallery notes are hidden on Cover / Card / Preview / Annotations tiles; the notes themselves stay in the library.
+
 **Precedence:** when `order` is non-empty after pruning missing keys, pinned stacks / next-up, Explorer collection shelves, and Gallery with sort **Auto** use personal order instead of syllabus class order (Gallery flattens grouping while that list exists). Gallery sort **Personal Reading Order** is the same precedence with DnD chrome (ordered, then an Unordered gap, then the rest). Auto without a personal list falls back to class/syllabus order when the collection is a syllabus. The Syllabus tab stays class-structured. Item merges remap keys via `dc:replaces` like the syllabus note.
 
 ## Item merges
@@ -175,16 +177,34 @@ Collection-scoped notes on regular items for Gallery / card views. Each note is 
 - When remapping item merges, never write the syllabus note on the merge/notifier call stack; queue like Extra absorb. Do not treat item `trash` as a merge unless `dc:replaces` names a live survivor.
 - **Native `<select>` does not open in DialogHelper / `openPreactDialog` windows** — the dialog body uses `overflow: hidden`, which clips the OS popup. Use an in-flow listbox/picker (button + role=listbox options) instead. See [`SettingsPage.tsx`](../src/modules/SettingsPage.tsx) (citation style) and [`CollectionShareWizard.tsx`](../src/modules/CollectionShareWizard.tsx) (`PickerRow`).
 
+## Workspace packages
+
+Shared chrome libraries live under [`packages/`](../packages/README.md) and are consumed with `workspace:*` (TypeScript source; esbuild bundles them into the XPI). Docs site: [Workspace packages](https://janbaykara.github.io/zotero-syllabus/developers/packages/). Index and per-package READMEs: [`packages/README.md`](../packages/README.md).
+
+| Package                             | Purpose                                       |
+| ----------------------------------- | --------------------------------------------- |
+| `@janbaykara/zotero-jotai-state`    | Prefs/Notifier subscribe + `atomFromExternal` |
+| `@janbaykara/zotero-cache`          | Notifier-invalidated item/collection/pref LRU |
+| `@janbaykara/zotero-annotations`    | Annotation color/tag/batch/highlight utils    |
+| `@janbaykara/zotero-os-file-drop`   | OS file/URL drop (core + `/preact`)           |
+| `@janbaykara/zotero-chrome`         | Typed chrome content/skin URLs, window features, XUL, tags-box |
+| `@janbaykara/zotero-csl`            | CSL styles + bibliography                     |
+| `@janbaykara/zotero-dnd`            | Chrome DnD (core + `/preact`)                 |
+| `@janbaykara/zotero-preact`         | Preact roots, tabs, dialogs                   |
+| `@janbaykara/zotero-tailwind-theme` | Tailwind `@theme` → Zotero CSS tokens         |
+
+Only `@janbaykara/zotero-preact` needs host wiring ([`configurePackages.ts`](../src/utils/configurePackages.ts)); other packages use `Zotero` or call-site options. Scaffold watches `packages/` alongside `src` / `addon`.
+
 ## Shared data layer (Jotai)
 
 Preact roots (Syllabus, ItemPane, Gallery, Explorer, tabs) share one Jotai **default store**. Do not wrap `renderComponent` trees in `<Provider>` — that isolates roots.
 
-- **External truth** (Zotero selection, prefs, syllabus notes, explorer queries, pinned shelf, subcollection trees, personal reading order) → [`atomFromExternal` / `atomFamilyFromExternal`](../src/modules/react-zotero-sync/jotaiExternal.ts) with `onMount` subscribe (`atomFamily` from [`jotai-family`](https://github.com/jotaijs/jotai-family), not `jotai/utils`). Coerced string prefs use [`createCoercedPrefHooks`](../src/modules/react-zotero-sync/coercedPref.ts).
+- **External truth** (Zotero selection, prefs, syllabus notes, explorer queries, pinned shelf, subcollection trees, personal reading order) → [`atomFromExternal` / `atomFamilyFromExternal`](../packages/zotero-jotai-state/src/jotaiExternal.ts) from `@janbaykara/zotero-jotai-state` with `onMount` subscribe (`atomFamily` from [`jotai-family`](https://github.com/jotaijs/jotai-family), not `jotai/utils`). Coerced string prefs use [`createCoercedPrefHooks`](../src/modules/react-zotero-sync/coercedPref.ts). Domain sources stay under [`src/modules/react-zotero-sync/`](../src/modules/react-zotero-sync/).
 - **Plugin UI truth** (syllabus assignment identifiers, …) → plain `atom`; set via hooks / `getDefaultStore()`.
 - **Entity state as atoms (preferred).** Where possible, represent Zotero entity state with a Jotai atom (usually `atomFamilyFromExternal` keyed by item id, collection id, class number, …) and a hook that returns that value. Examples: [`useClassReadingDone`](../src/modules/react-zotero-sync/personalReadingOrder.ts), [`useIsPinnedItem`](../src/modules/react-zotero-sync/pinned.ts). Do **not** have components `void usePersonalReadingOrderGeneration()` (or similar) and then call an imperative getter — that over-invalidates and hides the dependency. Generation counters / domain buses remain fine **inside** atom `subscribe` callbacks; UI call sites should read the entity atom.
 - **Optimistic entity writes (flipside of entity atoms).** User gestures that mutate plugin-owned note documents should update the in-memory cache and notify subscribers **before** awaiting the Zotero note save, so entity atoms re-render immediately. Pattern: sync `patch*Optimistic(collection, mutator)` → async `mutate*` with the same absolute mutator (idempotent under the write queue). Syllabus: [`patchCollectionDocumentOptimistic`](../src/modules/syllabusNote.ts) (DnD order / assignments). Personal Reading Order: [`patchPersonalReadingOrderOptimistic`](../src/modules/personalReadingOrder.ts) via `setItemReadingDone` / `setAssignmentReadingDone` / `setClassReadingDone`. Avoid awaiting unrelated work (e.g. `ensureClass` note writes) before the optimistic PRO patch when a sync class id is already available.
-- Do **not** add new `useSyncExternalStore` / `useState`+Notifier mirrors in components — wrap Notifier/Prefs in the helpers above.
-- Pref observers: [`subscribePref` / `subscribePrefs`](../src/utils/prefSubscribe.ts) or [`subscribePluginPref`](../src/utils/prefs.ts) — do not call `Zotero.Prefs.registerObserver` directly.
+- Do **not** add new `useSyncExternalStore` / `useState`+Notifier mirrors in components — wrap Notifier/Prefs in `@janbaykara/zotero-jotai-state`.
+- Pref observers: `subscribePref` / `subscribePrefs` from that package, or [`subscribePluginPref`](../src/utils/prefs.ts) — do not call `Zotero.Prefs.registerObserver` directly.
 - Public hooks stay the call-site API; Notifier/`subscribe*` wiring lives inside atom `subscribe` callbacks (or domain buses like `syllabusNote` / `pinned` that those callbacks attach to).
 
 Esbuild aliases `react` / `react-dom` to `preact/compat` so Jotai bundles against Preact.
