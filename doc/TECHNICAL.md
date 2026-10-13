@@ -380,6 +380,8 @@ pnpm start
 
 Use **pnpm** only (`packageManager` + `pnpm-lock.yaml`). After pulling dependency changes, run `pnpm install` so local `lint:fix` / `lint:check` match CI. Do not commit `package-lock.json`.
 
+The esbuild banner in [`zotero-plugin.config.ts`](../zotero-plugin.config.ts) installs bare `AbortController` / `AbortSignal` / `queueMicrotask` before the bundle runs. `@dnd-kit/abstract` evaluates `class ActivationController extends AbortController` at load time, and the `loadSubScript` sandbox has no window globals — without the banner (including its polyfill fallback), startup fails with `class heritage AbortController is not an object or null`.
+
 ## Project structure
 
 ```

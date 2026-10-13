@@ -78,39 +78,84 @@ export default defineConfig({
         },
         banner: {
           // @dnd-kit/abstract ActivationController extends AbortController at
-          // module eval; chrome bootstrap sandboxes often lack bare bindings
-          // (headless CI especially). Prefer ChromeUtils.importGlobalProperties,
-          // then fall back to window / hiddenDOMWindow.
+          // module eval. loadSubScript sandboxes have no window globals;
+          // AbortController is NOT in ChromeUtils.importGlobalProperties' list,
+          // and hiddenDOMWindow / main window can be unavailable at bootstrap.
+          // Always end with a minimal polyfill so class heritage never sees
+          // undefined (that crash prevents the whole plugin from loading).
           js: `
 (function () {
-  var g = typeof globalThis !== "undefined" ? globalThis : null;
-  if (g && typeof g.AbortController !== "function") {
+  var g = typeof globalThis !== "undefined" ? globalThis : this;
+  function pickWindow() {
     try {
-      ChromeUtils.importGlobalProperties(["AbortController", "AbortSignal"]);
+      if (typeof window !== "undefined" && window) return window;
     } catch (e) {}
-  }
-  if (g && typeof g.AbortController !== "function") {
     try {
-      var w = typeof window !== "undefined" ? window
-        : Components.classes["@mozilla.org/appshell/appShellService;1"]
-            .getService(Components.interfaces.nsIAppShellService).hiddenDOMWindow;
-      if (w && w.AbortController) {
-        g.AbortController = w.AbortController;
-        if (w.AbortSignal) g.AbortSignal = w.AbortSignal;
+      if (typeof Zotero !== "undefined" && Zotero.getMainWindow) {
+        var zw = Zotero.getMainWindow();
+        if (zw) return zw;
       }
     } catch (e2) {}
-  }
-  if (g && typeof g.queueMicrotask !== "function") {
     try {
-      var w2 = typeof window !== "undefined" ? window
-        : Components.classes["@mozilla.org/appshell/appShellService;1"]
-            .getService(Components.interfaces.nsIAppShellService).hiddenDOMWindow;
-      g.queueMicrotask = (w2 && typeof w2.queueMicrotask === "function")
-        ? w2.queueMicrotask.bind(w2)
-        : function (cb) { Promise.resolve().then(cb); };
-    } catch (e3) {
-      g.queueMicrotask = function (cb) { Promise.resolve().then(cb); };
+      return Components.classes["@mozilla.org/appshell/appShellService;1"]
+        .getService(Components.interfaces.nsIAppShellService).hiddenDOMWindow;
+    } catch (e3) {}
+    return null;
+  }
+  if (typeof g.AbortController !== "function") {
+    var w = pickWindow();
+    if (w && typeof w.AbortController === "function") {
+      g.AbortController = w.AbortController;
+      if (w.AbortSignal) g.AbortSignal = w.AbortSignal;
     }
+  }
+  if (typeof g.AbortController !== "function") {
+    function AbortSignalPolyfill() {
+      this.aborted = false;
+      this.reason = undefined;
+      this.onabort = null;
+      this._listeners = [];
+    }
+    AbortSignalPolyfill.prototype.addEventListener = function (type, listener) {
+      if (type === "abort" && typeof listener === "function") {
+        this._listeners.push(listener);
+      }
+    };
+    AbortSignalPolyfill.prototype.removeEventListener = function (type, listener) {
+      if (type !== "abort") return;
+      this._listeners = this._listeners.filter(function (l) { return l !== listener; });
+    };
+    AbortSignalPolyfill.prototype.dispatchEvent = function (event) {
+      if (!event || event.type !== "abort") return false;
+      for (var i = 0; i < this._listeners.length; i++) {
+        try { this._listeners[i].call(this, event); } catch (err) {}
+      }
+      if (typeof this.onabort === "function") {
+        try { this.onabort.call(this, event); } catch (err2) {}
+      }
+      return true;
+    };
+    AbortSignalPolyfill.prototype.throwIfAborted = function () {
+      if (this.aborted) throw this.reason;
+    };
+    function AbortControllerPolyfill() {
+      this.signal = new AbortSignalPolyfill();
+    }
+    AbortControllerPolyfill.prototype.abort = function (reason) {
+      var s = this.signal;
+      if (s.aborted) return;
+      s.aborted = true;
+      s.reason = reason !== undefined ? reason : new Error("Aborted");
+      s.dispatchEvent({ type: "abort", target: s });
+    };
+    g.AbortController = AbortControllerPolyfill;
+    g.AbortSignal = AbortSignalPolyfill;
+  }
+  if (typeof g.queueMicrotask !== "function") {
+    var w2 = pickWindow();
+    g.queueMicrotask = (w2 && typeof w2.queueMicrotask === "function")
+      ? w2.queueMicrotask.bind(w2)
+      : function (cb) { Promise.resolve().then(cb); };
   }
 })();
 var AbortController = globalThis.AbortController;
