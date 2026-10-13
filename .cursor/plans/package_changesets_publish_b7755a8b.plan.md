@@ -42,8 +42,6 @@ flowchart LR
   workspace --> xpi[XPI build unchanged]
 ```
 
-
-
 ## 1. Per-package build
 
 - Add `[packages/tsconfig.base.json](packages/tsconfig.base.json)` (ESM, `declaration`, `outDir: dist`, `rootDir: src`; `skipLibCheck` as needed for `zotero-types`).
@@ -100,4 +98,3 @@ Example `publishConfig` shape (TS package):
 - Publishing the root plugin as an npm package.
 - Package typedoc on the docs site.
 - Changing plugin import paths or dropping `workspace:*`.
-
