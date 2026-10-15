@@ -3,6 +3,7 @@ import {
   handleAdminClearQuota,
   handleAdminDashboard,
   handleAdminDeleteItem,
+  handleAdminDeleteOrphan,
   handleAdminDeleteSyllabus,
   handleAdminSetQuota,
 } from "./admin";
@@ -292,6 +293,9 @@ export default {
       }
       if (path === "/admin/item" && request.method === "DELETE") {
         return handleAdminDeleteItem(request, env);
+      }
+      if (path === "/admin/orphan" && request.method === "DELETE") {
+        return handleAdminDeleteOrphan(request, env);
       }
       if (path === "/admin/quota" && request.method === "PUT") {
         return handleAdminSetQuota(request, env);

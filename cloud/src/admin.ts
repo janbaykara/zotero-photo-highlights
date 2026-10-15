@@ -1,6 +1,8 @@
 import type { Env } from "./types";
 import { queryViewStats, syllabusStatsKey, type ViewStats } from "./analytics";
 import {
+  deleteItemPrefix,
+  readItemRefs,
   readSyllabusItemKeys,
   removeSyllabusFromItems,
   unpublishItemPage,
@@ -12,6 +14,7 @@ import {
   objectKey,
   publicUrlForItem,
   publicUrlForSyllabus,
+  userItemPrefix,
   userSyllabusPrefix,
 } from "./paths";
 import {
@@ -63,6 +66,20 @@ export type AdminUserSummary = {
   syllabusCount: number;
   itemCount: number;
   files: number;
+  /** Bytes under item prefixes with no cover page and not in any syllabus itemKeys. */
+  orphanBytes: number;
+  orphanCount: number;
+};
+
+/** Item-prefix storage not tied to a listed syllabus or Share via URL page. */
+export type AdminOrphan = {
+  userId: string;
+  libraryId: string;
+  itemKey: string;
+  bytes: number;
+  files: number;
+  /** Public Worker URL (prefers a files/ object so the link opens something). */
+  publicUrl: string;
 };
 
 export type AdminReport = {
@@ -72,10 +89,17 @@ export type AdminReport = {
   syllabi: PublishedShare[];
   /** Per-user storage + effective quota, sorted by usage desc. */
   users: AdminUserSummary[];
+  /**
+   * Item prefixes with no index.html and not referenced by any published
+   * syllabus itemKeys.json (leftovers from republish / incomplete GC).
+   */
+  orphans: AdminOrphan[];
   /** Default quota from USER_QUOTA_BYTES (bytes). */
   defaultQuotaBytes: number;
   totalBytes: number;
   totalFiles: number;
+  orphanBytes: number;
+  orphanCount: number;
   syllabusCount: number;
   itemCount: number;
   userCount: number;
@@ -84,6 +108,33 @@ export type AdminReport = {
 
 const SYLLABUS_KEY = /^users\/([^/]+)\/syllabi\/([^/]+)\/([^/]+)\/(.+)$/;
 const ITEM_KEY = /^users\/([^/]+)\/items\/([^/]+)\/([^/]+)\/(.+)$/;
+
+/** Item keys listed in a syllabus share.json (page membership). */
+async function readShareJsonItemKeys(
+  env: Env,
+  syllabusPrefix: string,
+): Promise<string[]> {
+  try {
+    const obj = await env.BUCKET.get(`${syllabusPrefix}share.json`);
+    if (!obj) return [];
+    const raw = (await obj.json()) as { items?: unknown };
+    if (!Array.isArray(raw.items)) return [];
+    const out: string[] = [];
+    for (const entry of raw.items) {
+      if (!entry || typeof entry !== "object") continue;
+      const key = (entry as { key?: unknown }).key;
+      if (typeof key !== "string") continue;
+      try {
+        out.push(assertSafeSegment(key, "itemKey"));
+      } catch {
+        // skip invalid
+      }
+    }
+    return [...new Set(out)];
+  } catch {
+    return [];
+  }
+}
 
 /** Timing-safe equality for secrets of equal length; rejects otherwise. */
 export function adminKeyMatches(
@@ -176,6 +227,8 @@ type AccRow = {
   bytes: number;
   files: number;
   hasIndex: boolean;
+  /** First browsable relative path under an item prefix (for orphan links). */
+  sampleRelPath: string;
 };
 
 /** List published syllabi and item share pages by scanning R2 under users/. */
@@ -212,6 +265,7 @@ export async function listPublishedSyllabi(
             bytes: 0,
             files: 0,
             hasIndex: false,
+            sampleRelPath: "",
           };
           byId.set(id, row);
         }
@@ -242,6 +296,7 @@ export async function listPublishedSyllabi(
           bytes: 0,
           files: 0,
           hasIndex: false,
+          sampleRelPath: "",
         };
         byId.set(id, row);
       }
@@ -250,6 +305,15 @@ export async function listPublishedSyllabi(
         row.hasIndex = true;
       } else if (relPath.startsWith("files/")) {
         row.files += 1;
+        if (!row.sampleRelPath || !row.sampleRelPath.startsWith("files/")) {
+          row.sampleRelPath = relPath;
+        }
+      } else if (
+        !row.sampleRelPath &&
+        relPath !== "refs.json" &&
+        !relPath.endsWith(".json")
+      ) {
+        row.sampleRelPath = relPath;
       }
     }
     cursor = listed.truncated ? listed.cursor : undefined;
@@ -322,7 +386,18 @@ export async function listPublishedSyllabi(
   }
 
   // Attachments are stored under item prefixes, not the syllabus folder.
-  // Fold referenced item prefix sizes into each syllabus row.
+  // Fold itemKeys sizes into syllabus rows; build the protected set from
+  // every live publish manifest (itemKeys.json + share.json items + item pages).
+  const protectedItemIds = new Set<string>();
+
+  for (const s of shares) {
+    if (s.kind === "item") {
+      protectedItemIds.add(
+        shareId("item", s.userId, s.libraryId, s.itemKey),
+      );
+    }
+  }
+
   await Promise.all(
     shares
       .filter((s) => s.kind === "syllabus")
@@ -333,25 +408,98 @@ export async function listPublishedSyllabi(
             s.libraryId,
             s.collectionKey,
           );
-          const itemKeys = await readSyllabusItemKeys(
-            env,
-            s.userId,
-            s.libraryId,
-            s.collectionKey,
-            prefix,
-          );
-          for (const itemKey of itemKeys) {
-            const stats = itemPrefixStats.get(
+          const [itemKeys, shareKeys] = await Promise.all([
+            readSyllabusItemKeys(
+              env,
+              s.userId,
+              s.libraryId,
+              s.collectionKey,
+              prefix,
+            ),
+            readShareJsonItemKeys(env, prefix),
+          ]);
+          for (const itemKey of new Set([...itemKeys, ...shareKeys])) {
+            protectedItemIds.add(
               shareId("item", s.userId, s.libraryId, itemKey),
             );
+          }
+          for (const itemKey of itemKeys) {
+            const id = shareId("item", s.userId, s.libraryId, itemKey);
+            const stats = itemPrefixStats.get(id);
             if (!stats) continue;
             s.bytes += stats.bytes;
             s.files += stats.files;
           }
         } catch {
-          // Leave syllabus chrome-only size if itemKeys cannot be read.
+          // Leave syllabus chrome-only size if manifests cannot be read.
         }
       }),
+  );
+
+  /**
+   * Orphan = item prefix that is definitely not part of any live publish:
+   * 1. R2 list saw no index.html (not a Share via URL page)
+   * 2. Not listed in any live syllabus itemKeys.json (attachments)
+   * 3. Not listed in any live syllabus share.json items[] (page membership)
+   * 4. Fresh HEAD confirms index.html is still absent
+   * 5. refs.json page flag is not true (no claimed item-page publish)
+   * refs.syllabi alone does not protect — that is GC bookkeeping and can be
+   * stale after republish; itemKeys/share.json are authoritative for what the
+   * public page uses.
+   */
+  const orphanCandidates: AccRow[] = [];
+  for (const row of byId.values()) {
+    if (row.kind !== "item" || row.hasIndex) continue;
+    const id = shareId("item", row.userId, row.libraryId, row.itemKey);
+    if (protectedItemIds.has(id)) continue;
+    if (row.bytes <= 0 && row.files <= 0) continue;
+    orphanCandidates.push(row);
+  }
+
+  const orphans: AdminOrphan[] = (
+    await Promise.all(
+      orphanCandidates.map(async (row) => {
+        try {
+          const indexHead = await env.BUCKET.head(
+            itemObjectKey(row.userId, row.libraryId, row.itemKey, "index.html"),
+          );
+          if (indexHead) return null;
+          const refs = await readItemRefs(
+            env,
+            row.userId,
+            row.libraryId,
+            row.itemKey,
+          );
+          if (refs.page) return null;
+          const itemBase = publicUrlForItem(
+            base,
+            row.userId,
+            row.libraryId,
+            row.itemKey,
+          );
+          const publicUrl = row.sampleRelPath
+            ? `${itemBase}${row.sampleRelPath}`
+            : itemBase;
+          return {
+            userId: row.userId,
+            libraryId: row.libraryId,
+            itemKey: row.itemKey,
+            bytes: row.bytes,
+            files: row.files,
+            publicUrl,
+          } satisfies AdminOrphan;
+        } catch {
+          return null;
+        }
+      }),
+    )
+  ).filter((o): o is AdminOrphan => o != null);
+
+  orphans.sort(
+    (a, b) =>
+      b.bytes - a.bytes ||
+      a.userId.localeCompare(b.userId) ||
+      a.itemKey.localeCompare(b.itemKey),
   );
 
   await attachIndexMeta(env, shares);
@@ -376,8 +524,28 @@ export async function listPublishedSyllabi(
   const excludeFromChartKeys = new Set<string>();
   const byUserAcc = new Map<
     string,
-    { syllabusCount: number; itemCount: number; files: number }
+    {
+      syllabusCount: number;
+      itemCount: number;
+      files: number;
+      orphanBytes: number;
+      orphanCount: number;
+    }
   >();
+  const ensureUserAcc = (userId: string) => {
+    let acc = byUserAcc.get(userId);
+    if (!acc) {
+      acc = {
+        syllabusCount: 0,
+        itemCount: 0,
+        files: 0,
+        orphanBytes: 0,
+        orphanCount: 0,
+      };
+      byUserAcc.set(userId, acc);
+    }
+    return acc;
+  };
   for (const s of shares) {
     totalFiles += s.files;
     userIds.add(s.userId);
@@ -386,14 +554,18 @@ export async function listPublishedSyllabi(
     if (s.dev) {
       excludeFromChartKeys.add(shareStatsKey(s));
     }
-    let acc = byUserAcc.get(s.userId);
-    if (!acc) {
-      acc = { syllabusCount: 0, itemCount: 0, files: 0 };
-      byUserAcc.set(s.userId, acc);
-    }
+    const acc = ensureUserAcc(s.userId);
     acc.files += s.files;
     if (s.kind === "syllabus") acc.syllabusCount += 1;
     else acc.itemCount += 1;
+  }
+  let orphanBytes = 0;
+  for (const o of orphans) {
+    orphanBytes += o.bytes;
+    userIds.add(o.userId);
+    const acc = ensureUserAcc(o.userId);
+    acc.orphanBytes += o.bytes;
+    acc.orphanCount += 1;
   }
 
   const defaultQuotaBytes = getDefaultQuotaBytes(env);
@@ -413,6 +585,8 @@ export async function listPublishedSyllabi(
         syllabusCount: acc.syllabusCount,
         itemCount: acc.itemCount,
         files: acc.files,
+        orphanBytes: acc.orphanBytes,
+        orphanCount: acc.orphanCount,
       };
     }),
   );
@@ -438,9 +612,12 @@ export async function listPublishedSyllabi(
     shares,
     syllabi: shares.filter((s) => s.kind === "syllabus"),
     users,
+    orphans,
     defaultQuotaBytes,
     totalBytes,
     totalFiles,
+    orphanBytes,
+    orphanCount: orphans.length,
     syllabusCount,
     itemCount,
     userCount: userIds.size,
@@ -635,12 +812,17 @@ function renderUsersSummary(report: AdminReport): string {
         );
       }
       const shares = shareParts.join(", ") || "0 shares";
+      const orphanCell =
+        u.orphanCount > 0
+          ? `${escapeHtml(formatBytes(u.orphanBytes))} (${u.orphanCount})`
+          : `<span class="muted">—</span>`;
       return `<tr>
   <td class="mono" data-sort="${escapeHtml(u.userId)}">${escapeHtml(u.userId)}</td>
   <td class="num" data-sort="${u.usageBytes}" data-sort-type="num">${escapeHtml(formatBytes(u.usageBytes))}</td>
   <td class="num" data-sort="${u.quotaBytes}" data-sort-type="num">${escapeHtml(formatBytes(u.quotaBytes))}</td>
   <td class="num" data-sort="${pct}" data-sort-type="num">${pct}%</td>
   <td data-sort="${escapeHtml(shares)}">${escapeHtml(shares)}</td>
+  <td class="num" data-sort="${u.orphanBytes}" data-sort-type="num">${orphanCell}</td>
   <td data-sort="${u.quotaOverride ? "1" : "0"}">${override}</td>
 </tr>`;
     })
@@ -657,7 +839,8 @@ function renderUsersSummary(report: AdminReport): string {
         <th scope="col" class="num" data-col="2"><button type="button" class="sort">Quota</button></th>
         <th scope="col" class="num" data-col="3"><button type="button" class="sort">%</button></th>
         <th scope="col" data-col="4"><button type="button" class="sort">Shares</button></th>
-        <th scope="col" data-col="5"><button type="button" class="sort">Quota source</button></th>
+        <th scope="col" class="num" data-col="5"><button type="button" class="sort">Orphans</button></th>
+        <th scope="col" data-col="6"><button type="button" class="sort">Quota source</button></th>
       </tr>
     </thead>
     <tbody>
@@ -665,6 +848,50 @@ ${rows}
     </tbody>
   </table>
 </section>`;
+}
+
+/** Orphan table nested under a single user section. */
+function renderUserOrphansTable(orphans: AdminOrphan[]): string {
+  if (orphans.length === 0) return "";
+  const bytes = orphans.reduce((n, o) => n + o.bytes, 0);
+  const trs = orphans
+    .map((o) => {
+      const label = `${o.userId}/${o.libraryId}/${o.itemKey}`;
+      const deleteAttrs = `data-kind="orphan" data-user-id="${escapeHtml(o.userId)}" data-library-id="${escapeHtml(o.libraryId)}" data-item-key="${escapeHtml(o.itemKey)}" data-label="${escapeHtml(label)}"`;
+      const linkCell = `<a class="title-link" href="${escapeHtml(o.publicUrl)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(o.publicUrl)}">${escapeHtml(o.publicUrl)}</a>`;
+      return `<tr>
+  <td class="check-col"><input type="checkbox" class="row-check" aria-label="Select orphan ${escapeHtml(o.itemKey)}" ${deleteAttrs}></td>
+  <td class="mono" data-sort="${escapeHtml(o.libraryId)}">${escapeHtml(o.libraryId)}</td>
+  <td class="mono" data-sort="${escapeHtml(o.itemKey)}">${escapeHtml(o.itemKey)}</td>
+  <td data-sort="${escapeHtml(o.publicUrl.toLowerCase())}">${linkCell}</td>
+  <td class="num" data-sort="${o.bytes}" data-sort-type="num">${escapeHtml(formatBytes(o.bytes))}</td>
+  <td class="num" data-sort="${o.files}" data-sort-type="num">${o.files}</td>
+  <td><button type="button" class="delete" ${deleteAttrs}>Delete</button></td>
+</tr>`;
+    })
+    .join("\n");
+  return `<h3 class="orphans-heading">Orphan storage
+    <span class="muted">— ${orphans.length} prefix${orphans.length === 1 ? "" : "es"},
+    ${escapeHtml(formatBytes(bytes))}. Verified: no <code>index.html</code>, not in any live syllabus
+    <code>itemKeys.json</code> or <code>share.json</code>, and <code>refs.page</code> is not set.
+    Links open a public object under the prefix (usually a <code>files/</code> attachment).</span>
+  </h3>
+  <table class="sortable orphans-table">
+    <thead>
+      <tr>
+        <th scope="col" class="check-col"><input type="checkbox" class="select-table" title="Select all orphans for this user" aria-label="Select all orphans for this user"></th>
+        <th scope="col" data-col="1"><button type="button" class="sort">Library</button></th>
+        <th scope="col" data-col="2"><button type="button" class="sort">Item key</button></th>
+        <th scope="col" data-col="3"><button type="button" class="sort">Public URL</button></th>
+        <th scope="col" class="num" data-col="4"><button type="button" class="sort">Size</button></th>
+        <th scope="col" class="num" data-col="5"><button type="button" class="sort">Files</button></th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+${trs}
+    </tbody>
+  </table>`;
 }
 
 export function renderAdminHtml(report: AdminReport): string {
@@ -675,12 +902,34 @@ export function renderAdminHtml(report: AdminReport): string {
     list.push(s);
     byUser.set(s.userId, list);
   }
+  const orphansByUser = new Map<string, AdminOrphan[]>();
+  for (const o of report.orphans) {
+    const list = orphansByUser.get(o.userId) || [];
+    list.push(o);
+    orphansByUser.set(o.userId, list);
+  }
   const userSummaryById = new Map(
     report.users.map((u) => [u.userId, u] as const),
   );
+  // Preserve Users-table order (usage desc); include anyone with shares or orphans.
+  const sectionUserIds: string[] = [];
+  const seenUsers = new Set<string>();
+  for (const u of report.users) {
+    sectionUserIds.push(u.userId);
+    seenUsers.add(u.userId);
+  }
+  for (const userId of byUser.keys()) {
+    if (!seenUsers.has(userId)) {
+      sectionUserIds.push(userId);
+      seenUsers.add(userId);
+    }
+  }
 
   const sections: string[] = [];
-  for (const [userId, rows] of byUser) {
+  for (const userId of sectionUserIds) {
+    const rows = byUser.get(userId) || [];
+    const userOrphans = orphansByUser.get(userId) || [];
+    if (rows.length === 0 && userOrphans.length === 0) continue;
     const userFiles = rows.reduce((n, r) => n + r.files, 0);
     const u = userSummaryById.get(userId);
     const userBytes = u?.usageBytes ?? rows.reduce((n, r) => n + r.bytes, 0);
@@ -689,7 +938,13 @@ export function renderAdminHtml(report: AdminReport): string {
     const overrideBadge = u?.quotaOverride
       ? ` <span class="type-pill type-override">Override</span>`
       : "";
+    const orphanNote =
+      userOrphans.length > 0
+        ? `, <span class="orphan-note">${escapeHtml(formatBytes(userOrphans.reduce((n, o) => n + o.bytes, 0)))} orphan${userOrphans.length === 1 ? "" : "s"}</span>`
+        : "";
     const quotaMbDefault = Math.round(quotaBytes / (1024 * 1024));
+    const shareSummary =
+      rows.length > 0 ? escapeHtml(userSummary(rows)) : "0 shares";
     const trs = rows
       .map((r) => {
         const key = shareStatsKey(r);
@@ -757,21 +1012,10 @@ export function renderAdminHtml(report: AdminReport): string {
 </tr>`;
       })
       .join("\n");
-    sections.push(`<section data-user-id="${escapeHtml(userId)}">
-  <h2>User <span class="mono">${escapeHtml(userId)}</span>
-    <span class="muted">— ${escapeHtml(userSummary(rows))},
-    ${escapeHtml(formatBytes(userBytes))} / ${escapeHtml(formatBytes(quotaBytes))} (${pct}%),
-    ${userFiles} file${userFiles === 1 ? "" : "s"}</span>${overrideBadge}
-  </h2>
-  <form class="quota-form" data-user-id="${escapeHtml(userId)}">
-    <label>Quota (MB)
-      <input type="number" class="quota-mb" min="1" step="1" value="${quotaMbDefault}" aria-label="Quota in megabytes for ${escapeHtml(userId)}">
-    </label>
-    <button type="submit" class="quota-set">Set quota</button>
-    <button type="button" class="quota-reset"${u?.quotaOverride ? "" : " disabled"}>Reset to default</button>
-    <span class="quota-status muted" aria-live="polite"></span>
-  </form>
-  <table class="sortable">
+    const sharesTable =
+      rows.length === 0
+        ? `<p class="muted">No published syllabi or Share via URL pages.</p>`
+        : `<table class="sortable">
     <thead>
       <tr>
         <th scope="col" class="check-col"><input type="checkbox" class="select-table" title="Select all in this table" aria-label="Select all in this table"></th>
@@ -792,14 +1036,30 @@ export function renderAdminHtml(report: AdminReport): string {
     <tbody>
 ${trs}
     </tbody>
-  </table>
+  </table>`;
+    sections.push(`<section data-user-id="${escapeHtml(userId)}">
+  <h2>User <span class="mono">${escapeHtml(userId)}</span>
+    <span class="muted">— ${shareSummary},
+    ${escapeHtml(formatBytes(userBytes))} / ${escapeHtml(formatBytes(quotaBytes))} (${pct}%),
+    ${userFiles} file${userFiles === 1 ? "" : "s"}${orphanNote}</span>${overrideBadge}
+  </h2>
+  <form class="quota-form" data-user-id="${escapeHtml(userId)}">
+    <label>Quota (MB)
+      <input type="number" class="quota-mb" min="1" step="1" value="${quotaMbDefault}" aria-label="Quota in megabytes for ${escapeHtml(userId)}">
+    </label>
+    <button type="submit" class="quota-set">Set quota</button>
+    <button type="button" class="quota-reset"${u?.quotaOverride ? "" : " disabled"}>Reset to default</button>
+    <span class="quota-status muted" aria-live="polite"></span>
+  </form>
+  ${sharesTable}
+  ${renderUserOrphansTable(userOrphans)}
 </section>`);
   }
 
   const usersSummary = renderUsersSummary(report);
   const body =
-    report.shares.length === 0
-      ? `<p class="muted">No published syllabi or shared items found.</p>`
+    sections.length === 0
+      ? `${usersSummary}\n<p class="muted">No published syllabi, shared items, or orphans found.</p>`
       : `${usersSummary}\n${sections.join("\n")}`;
 
   const viewsTotal = views.available ? formatCount(views.pageViews30d) : "—";
@@ -986,6 +1246,11 @@ ${trs}
     }
     .quota-form button.quota-set:hover:not(:disabled) { background: #1e40af; }
     .users-summary { margin-bottom: 0.5rem; }
+    .orphans-heading {
+      font-size: 0.98rem; margin: 1.25rem 0 0.55rem; font-weight: 600;
+    }
+    .orphans-table { margin-bottom: 0.25rem; }
+    .orphan-note { color: #9a3412; }
     tr.is-dev td { background: #fffbeb; }
     td.dev-col { white-space: nowrap; }
     td.ann-col { text-align: center; white-space: nowrap; }
@@ -1090,7 +1355,7 @@ ${trs}
     <h1>Syllabus publish admin</h1>
     <a href="https://dash.cloudflare.com/02bb1c1fe8fa155b4f84c74cbf9d8b36/web-analytics/overview?siteTag~in=d19e602cb91a4cfd9f55230ae70223d8&amp;excludeBots=Yes" target="_blank" rel="noopener noreferrer">Docs site analytics</a>
   </div>
-  <p class="muted">User <strong>used</strong> totals come from KV usage (same as plugin Preferences / <code>/v1/me</code>). Syllabus row sizes include referenced item-prefix attachments (PDFs live under <code>items/…</code>, not the syllabus folder). The <strong>Users</strong> table also shows effective quota (default from <code>USER_QUOTA_BYTES</code>, or a per-user override). Set or reset quotas on each user section. Metadata is course code · institution for syllabi, or item type for items (from index.html customMetadata; re-publish/sync to populate older shares). <strong>Title</strong> links to the public page. <strong>Annotations</strong> is a checkbox when the share included annotations, otherwise —. Pages published from a <strong>development</strong> plugin build are marked in the <strong>Dev</strong> column (and amber title links); they are omitted from chart bar heights and 30-day header totals, but still appear in chart tooltips with a <span class="type-pill type-dev">Dev</span> badge (row-level counts still show). Page views, file downloads, and citation exports (RIS/BIB/RDF) are last-30-day totals from Analytics Engine. <strong>Docs site analytics</strong> opens Cloudflare Web Analytics for the GitHub Pages docs site. Use row checkboxes for <strong>bulk delete</strong>, or Delete on a single row (syllabus wipe or item page unpublish); the publisher can re-publish from the plugin.</p>
+  <p class="muted">User <strong>used</strong> totals come from KV usage (same as plugin Preferences / <code>/v1/me</code>). Syllabus row sizes include referenced item-prefix attachments (PDFs live under <code>items/…</code>, not the syllabus folder). Per-user <strong>Orphan storage</strong> lists item prefixes verified unused by any live publish: no <code>index.html</code>, absent from every live syllabus <code>itemKeys.json</code> and <code>share.json</code>, and <code>refs.page</code> is not set (delete to reclaim quota). The <strong>Users</strong> table also shows effective quota (default from <code>USER_QUOTA_BYTES</code>, or a per-user override). Set or reset quotas on each user section. Metadata is course code · institution for syllabi, or item type for items (from index.html customMetadata; re-publish/sync to populate older shares). <strong>Title</strong> links to the public page. <strong>Annotations</strong> is a checkbox when the share included annotations, otherwise —. Pages published from a <strong>development</strong> plugin build are marked in the <strong>Dev</strong> column (and amber title links); they are omitted from chart bar heights and 30-day header totals, but still appear in chart tooltips with a <span class="type-pill type-dev">Dev</span> badge (row-level counts still show). Page views, file downloads, and citation exports (RIS/BIB/RDF) are last-30-day totals from Analytics Engine. <strong>Docs site analytics</strong> opens Cloudflare Web Analytics for the GitHub Pages docs site. Use row checkboxes for <strong>bulk delete</strong>, or Delete on a single row (syllabus wipe, item unpublish, or orphan wipe); the publisher can re-publish from the plugin.</p>
   <div class="bulk-bar" id="bulk-bar" aria-live="polite">
     <span class="bulk-count" id="bulk-count">0 selected</span>
     <button type="button" class="bulk-delete" id="bulk-delete">Delete selected</button>
@@ -1102,6 +1367,8 @@ ${trs}
     <div><strong>${report.itemCount}</strong><span>Items</span></div>
     <div><strong>${report.userCount}</strong><span>Users</span></div>
     <div><strong>${escapeHtml(formatBytes(report.totalBytes))}</strong><span>Total storage</span></div>
+    <div><strong>${escapeHtml(formatBytes(report.orphanBytes))}</strong><span>Orphan storage</span></div>
+    <div><strong>${report.orphanCount}</strong><span>Orphan prefixes</span></div>
     <div><strong>${report.totalFiles}</strong><span>Total files</span></div>
     <div><strong>${viewsTotal}</strong><span>Page views (30d)</span></div>
     <div><strong>${downloadsTotal}</strong><span>File downloads (30d)</span></div>
@@ -1125,11 +1392,17 @@ ${trs}
     }
 
     function deleteUrl(share) {
-      var url = new URL(share.kind === "item" ? "/admin/item" : "/admin/syllabus", location.origin);
+      var path =
+        share.kind === "orphan"
+          ? "/admin/orphan"
+          : share.kind === "item"
+            ? "/admin/item"
+            : "/admin/syllabus";
+      var url = new URL(path, location.origin);
       url.searchParams.set("key", key);
       url.searchParams.set("userId", share.userId);
       url.searchParams.set("libraryId", share.libraryId);
-      if (share.kind === "item") {
+      if (share.kind === "item" || share.kind === "orphan") {
         url.searchParams.set("itemKey", share.itemKey);
       } else {
         url.searchParams.set("collectionKey", share.collectionKey);
@@ -1141,10 +1414,10 @@ ${trs}
       if (!key || !share.userId || !share.libraryId) {
         throw new Error("Missing share identity");
       }
-      if (share.kind === "item" && !share.itemKey) {
+      if ((share.kind === "item" || share.kind === "orphan") && !share.itemKey) {
         throw new Error("Missing item key");
       }
-      if (share.kind !== "item" && !share.collectionKey) {
+      if (share.kind !== "item" && share.kind !== "orphan" && !share.collectionKey) {
         throw new Error("Missing collection key");
       }
       var res = await fetch(deleteUrl(share), { method: "DELETE" });
@@ -1226,7 +1499,7 @@ ${trs}
         var labels = shares.map(function (s) { return s.label || s.itemKey || s.collectionKey; });
         var preview = labels.slice(0, 8).join("\\n");
         if (labels.length > 8) preview += "\\n… and " + (labels.length - 8) + " more";
-        if (!confirm("Delete " + shares.length + " published share" + (shares.length === 1 ? "" : "s") + "?\\n\\n" + preview + "\\n\\nThis cannot be undone.")) {
+        if (!confirm("Delete " + shares.length + " selected row" + (shares.length === 1 ? "" : "s") + " (shares and/or orphans)?\\n\\n" + preview + "\\n\\nThis cannot be undone.")) {
           return;
         }
         bulkDeleteBtn.disabled = true;
@@ -1257,7 +1530,12 @@ ${trs}
         var share = shareFromEl(btn);
         var label = share.label || share.collectionKey || share.itemKey;
         if (!key || !share.userId || !share.libraryId) return;
-        if (share.kind === "item") {
+        if (share.kind === "orphan") {
+          if (!share.itemKey) return;
+          if (!confirm("Delete orphan item storage?\\n\\n" + label + "\\n\\nWipes the entire item prefix (files + refs). This cannot be undone.")) {
+            return;
+          }
+        } else if (share.kind === "item") {
           if (!share.itemKey) return;
           if (!confirm("Unpublish shared item?\\n\\n" + label + "\\n\\nRemoves the public item page (attached files stay if a syllabus still links to them).")) {
             return;
@@ -1562,6 +1840,108 @@ export async function handleAdminDeleteItem(
     }
     throw e;
   }
+}
+
+/**
+ * Wipe an orphan item prefix. Re-checks the same guards as the dash list:
+ * no index.html, refs.page is not set, and the item is not in any live
+ * syllabus itemKeys.json / share.json for this user+library.
+ */
+export async function handleAdminDeleteOrphan(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!requireAdminKey(request, env)) {
+    return adminJson({ error: "not_found" }, 404);
+  }
+
+  const url = new URL(request.url);
+  const userIdRaw = url.searchParams.get("userId") || "";
+  const libraryIdRaw = url.searchParams.get("libraryId") || "";
+  const itemKeyRaw = url.searchParams.get("itemKey") || "";
+
+  let userId: string;
+  let libraryId: string;
+  let itemKey: string;
+  try {
+    userId = assertSafeSegment(userIdRaw, "userId");
+    libraryId = assertSafeSegment(libraryIdRaw, "libraryId");
+    itemKey = assertSafeSegment(itemKeyRaw, "itemKey");
+    userItemPrefix(userId, libraryId, itemKey);
+  } catch (e) {
+    if (e instanceof PathError) {
+      return adminJson({ error: "bad_path", message: e.message }, 400);
+    }
+    throw e;
+  }
+
+  const indexKey = itemObjectKey(userId, libraryId, itemKey, "index.html");
+  const indexHead = await env.BUCKET.head(indexKey);
+  if (indexHead) {
+    return adminJson(
+      {
+        error: "not_orphan",
+        message:
+          "This item prefix still has index.html — unpublish via /admin/item instead",
+      },
+      409,
+    );
+  }
+
+  const refs = await readItemRefs(env, userId, libraryId, itemKey);
+  if (refs.page) {
+    return adminJson(
+      {
+        error: "not_orphan",
+        message: "refs.json still has page:true — not an orphan",
+      },
+      409,
+    );
+  }
+
+  // Refuse if any live syllabus for this user+library still lists the item.
+  const syllabusPrefixRoot = `users/${userId}/syllabi/${libraryId}/`;
+  let cursor: string | undefined;
+  const liveCollectionKeys = new Set<string>();
+  do {
+    const listed = await env.BUCKET.list({
+      prefix: syllabusPrefixRoot,
+      cursor,
+      limit: 1000,
+    });
+    for (const obj of listed.objects) {
+      const m = SYLLABUS_KEY.exec(obj.key);
+      if (!m || m[4] !== "index.html") continue;
+      if (m[1] !== userId || m[2] !== libraryId) continue;
+      liveCollectionKeys.add(m[3]);
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+
+  for (const collectionKey of liveCollectionKeys) {
+    const prefix = userSyllabusPrefix(userId, libraryId, collectionKey);
+    const [itemKeys, shareKeys] = await Promise.all([
+      readSyllabusItemKeys(env, userId, libraryId, collectionKey, prefix),
+      readShareJsonItemKeys(env, prefix),
+    ]);
+    if (itemKeys.includes(itemKey) || shareKeys.includes(itemKey)) {
+      return adminJson(
+        {
+          error: "not_orphan",
+          message: `Still listed by live syllabus ${collectionKey} (itemKeys or share.json)`,
+        },
+        409,
+      );
+    }
+  }
+
+  const deleted = await deleteItemPrefix(env, userId, libraryId, itemKey);
+  const usageBytes = await reconcileUsage(env, userId);
+  return adminJson({
+    ok: true,
+    deleted,
+    usageBytes,
+  });
 }
 
 /** Set a per-user storage quota override (KV `quota:{userId}`). */
