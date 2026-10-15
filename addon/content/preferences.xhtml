@@ -375,6 +375,57 @@
     </html:div>
   </html:section>
 
+  <!-- Publish online -->
+  <html:section class="syllabus-pref-card">
+    <html:div class="syllabus-pref-card-header">
+      <html:div class="syllabus-pref-card-heading">
+        <html:img
+          class="syllabus-pref-card-icon"
+          src="chrome://__addonRef__/content/icons/globe.svg"
+          alt=""
+        />
+        <html:h2
+          class="syllabus-pref-card-title"
+          data-l10n-id="pref-publish-title"
+        ></html:h2>
+      </html:div>
+    </html:div>
+    <html:div class="syllabus-pref-row">
+      <html:p
+        class="syllabus-pref-desc"
+        data-l10n-id="pref-publish-desc"
+      ></html:p>
+      <html:div
+        id="__addonRef__-pref-publish-meter"
+        class="syllabus-pref-publish-meter"
+        hidden="true"
+      >
+        <html:div
+          id="__addonRef__-pref-publish-bar"
+          class="syllabus-pref-publish-bar"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+        >
+          <html:div
+            id="__addonRef__-pref-publish-bar-fill"
+            class="syllabus-pref-publish-bar-fill"
+          ></html:div>
+        </html:div>
+      </html:div>
+      <html:p
+        id="__addonRef__-pref-publish-storage"
+        class="syllabus-pref-desc syllabus-pref-publish-storage"
+        data-l10n-id="pref-publish-loading"
+      ></html:p>
+      <html:p
+        class="syllabus-pref-desc"
+        data-l10n-id="pref-publish-quota-help"
+      ></html:p>
+    </html:div>
+  </html:section>
+
   <!-- Advanced -->
   <html:section class="syllabus-pref-card">
     <html:div class="syllabus-pref-card-header">

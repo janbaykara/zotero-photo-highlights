@@ -1,5 +1,6 @@
 import { config } from "../../package.json";
 import type { FluentMessageId } from "../../typings/i10n";
+import { formatPublishBytes } from "../utils/formatPublishError";
 import { getLocaleID } from "../utils/locale";
 import {
   getPrefValue,
@@ -7,6 +8,11 @@ import {
   resetAllPluginPrefs,
   setPref,
 } from "../utils/prefs";
+import {
+  fetchPublishMe,
+  getPublishSession,
+  isPublishApiConfigured,
+} from "../utils/publishAuth";
 import { confirmPrompt } from "../utils/window";
 import { refreshOptionalFeatureChrome } from "./optionalFeatures";
 
@@ -41,6 +47,89 @@ async function updatePrefsUI() {
   if (!win) return;
   ztoolkit.log("Preference window loaded");
   syncWpmInput(win);
+  void updatePublishStorageRow(win);
+}
+
+async function updatePublishStorageRow(win: Window) {
+  const el = win.document.getElementById(
+    `${config.addonRef}-pref-publish-storage`,
+  );
+  const meter = win.document.getElementById(
+    `${config.addonRef}-pref-publish-meter`,
+  );
+  const bar = win.document.getElementById(
+    `${config.addonRef}-pref-publish-bar`,
+  );
+  const fill = win.document.getElementById(
+    `${config.addonRef}-pref-publish-bar-fill`,
+  );
+  if (!el) return;
+
+  const hideMeter = () => {
+    if (meter) meter.hidden = true;
+    if (bar) {
+      bar.classList.remove("is-warn", "is-full");
+      bar.setAttribute("aria-valuenow", "0");
+      bar.removeAttribute("aria-label");
+    }
+    if (fill) (fill as HTMLElement).style.width = "0%";
+  };
+
+  const showMeter = (usageBytes: number, quotaBytes: number, label: string) => {
+    if (!meter || !bar || !fill) return;
+    const pct =
+      quotaBytes > 0
+        ? Math.min(100, Math.round((usageBytes / quotaBytes) * 100))
+        : 0;
+    meter.hidden = false;
+    (fill as HTMLElement).style.width = `${pct}%`;
+    bar.setAttribute("aria-valuenow", String(pct));
+    bar.setAttribute("aria-label", label);
+    bar.classList.toggle("is-full", pct >= 100);
+    bar.classList.toggle("is-warn", pct >= 85 && pct < 100);
+  };
+
+  const setL10n = async (
+    id: FluentMessageId,
+    args?: Record<string, string>,
+  ): Promise<string> => {
+    el.removeAttribute("data-l10n-args");
+    el.setAttribute("data-l10n-id", getLocaleID(id));
+    if (args) {
+      el.setAttribute("data-l10n-args", JSON.stringify(args));
+    }
+    // Fallback when document.l10n does not retranslate in time
+    const text = await formatPrefsL10nMessage(id, args);
+    if (text) {
+      el.textContent = text;
+    }
+    return text || "";
+  };
+
+  hideMeter();
+
+  if (!isPublishApiConfigured()) {
+    await setL10n("pref-publish-not-configured");
+    return;
+  }
+  if (!getPublishSession()) {
+    await setL10n("pref-publish-not-signed-in");
+    return;
+  }
+
+  await setL10n("pref-publish-loading");
+  try {
+    const me = await fetchPublishMe();
+    const label = await setL10n("pref-publish-storage", {
+      usage: formatPublishBytes(me.usageBytes),
+      quota: formatPublishBytes(me.quotaBytes),
+    });
+    showMeter(me.usageBytes, me.quotaBytes, label);
+  } catch (error) {
+    ztoolkit.log("Publish storage prefs fetch failed:", error);
+    hideMeter();
+    await setL10n("pref-publish-error");
+  }
 }
 
 function syncWpmInput(win: Window) {
@@ -157,14 +246,21 @@ async function handleResetPlugin() {
 }
 
 async function formatPrefsL10n(ids: FluentMessageId[]): Promise<string[]> {
-  const prefixed = ids.map((id) => getLocaleID(id));
+  return Promise.all(ids.map((id) => formatPrefsL10nMessage(id)));
+}
+
+async function formatPrefsL10nMessage(
+  id: FluentMessageId,
+  args?: Record<string, string>,
+): Promise<string> {
+  const prefixed = getLocaleID(id);
   const win = addon.data.prefs?.window;
   const l10n = (win?.document as Document & { l10n?: PrefsDocumentL10n })?.l10n;
-  if (l10n?.formatValues) {
+  if (l10n?.formatValues && !args) {
     try {
-      const values = await l10n.formatValues(prefixed);
-      if (values.every((value) => !!value)) {
-        return values as string[];
+      const values = await l10n.formatValues([prefixed]);
+      if (values[0]) {
+        return values[0];
       }
     } catch (error) {
       ztoolkit.log("formatPrefsL10n failed:", error);
@@ -181,10 +277,10 @@ async function formatPrefsL10n(ids: FluentMessageId[]): Promise<string[]> {
       [`${config.addonRef}-preferences.ftl`],
       true,
     );
-    const messages = bundle.formatMessagesSync(
-      prefixed.map((id) => ({ id })),
-    ) as Array<{ value: string | null } | null>;
-    return prefixed.map((id, i) => messages[i]?.value || id);
+    const messages = bundle.formatMessagesSync([
+      { id: prefixed, args: args || {} },
+    ]) as Array<{ value: string | null } | null>;
+    return messages[0]?.value || prefixed;
   } catch (error) {
     ztoolkit.log("formatPrefsL10n Localization fallback failed:", error);
     return prefixed;

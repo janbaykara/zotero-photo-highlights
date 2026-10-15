@@ -31,7 +31,7 @@ When publish or **Share via URL** fails, Zotero Syllabus shows a concrete reason
 
 Common fixes:
 
-- **Quota exceeded** — unpublish an old share, or turn off **Include attachments** / share fewer PDFs.
+- **Quota exceeded** — unpublish an old share, or turn off **Include attachments** / share fewer PDFs. See current usage under **Preferences → Zotero Syllabus → Publish online**. To request a higher quota, email [zoterosyllabus.deodorant482@passmail.net](mailto:zoterosyllabus.deodorant482@passmail.net).
 - **File too large** — skip that attachment or split the share.
 - **Sign-in expired / timed out** — try again; complete Zotero authorization in the browser when prompted.
 - **Could not reach the publish server** — check your network and try later.

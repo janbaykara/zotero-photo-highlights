@@ -11,6 +11,7 @@ description: Quick reference for Preferences → Zotero Syllabus and related con
 | **Display** | Default density; default Gallery layout |
 | **Copy** | Markdown blockquote prefix; Pandoc cite keys on copy from feed |
 | **Reading Schedule collection** | Generate auto-managed folder tree (optional) |
+| **Publish online** | Storage used vs quota (after publishing once); email for a higher quota if needed |
 
 ## Per collection / syllabus
 

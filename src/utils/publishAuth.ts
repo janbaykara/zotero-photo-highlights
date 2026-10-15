@@ -44,6 +44,28 @@ export function clearPublishSession(): void {
   clearPref("publishJwtExpiresAt");
 }
 
+/** Current usage / effective quota from GET /v1/me (requires publish session). */
+export async function fetchPublishMe(): Promise<{
+  userId: string;
+  usageBytes: number;
+  quotaBytes: number;
+}> {
+  const session = getPublishSession();
+  if (!session) {
+    throw new Error("publish_not_signed_in");
+  }
+  const data = await httpJson<{
+    userId?: string;
+    usageBytes?: number;
+    quotaBytes?: number;
+  }>("GET", "/v1/me", { token: session.token, noCache: true });
+  return {
+    userId: String(data.userId || session.userId),
+    usageBytes: Number(data.usageBytes || 0),
+    quotaBytes: Number(data.quotaBytes || 0),
+  };
+}
+
 function setPublishSession(opts: {
   token: string;
   userId: string;

@@ -138,6 +138,42 @@
   max-width: 42em;
 }
 
+.syllabus-pref-publish-meter {
+  margin: 8px 0 4px;
+  max-width: 28em;
+}
+
+.syllabus-pref-publish-meter[hidden] {
+  display: none;
+}
+
+.syllabus-pref-publish-bar {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--fill-quaternary, #888) 40%, transparent);
+}
+
+.syllabus-pref-publish-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--accent-color, #2c6bed);
+  transition: width 0.2s ease;
+}
+
+.syllabus-pref-publish-bar.is-warn .syllabus-pref-publish-bar-fill {
+  background: #d97706;
+}
+
+.syllabus-pref-publish-bar.is-full .syllabus-pref-publish-bar-fill {
+  background: #dc2626;
+}
+
+.syllabus-pref-publish-storage {
+  margin-top: 2px;
+}
+
 .syllabus-pref-wpm-input {
   width: 5em;
   margin-inline-start: 4px;

@@ -1,8 +1,10 @@
 import type { Env, OAuthPending, OAuthReady } from "./types";
 import {
+  handleAdminClearQuota,
   handleAdminDashboard,
   handleAdminDeleteItem,
   handleAdminDeleteSyllabus,
+  handleAdminSetQuota,
 } from "./admin";
 import { recordPublicHit } from "./analytics";
 import { randomId, signJwt, verifyJwt } from "./jwt";
@@ -35,6 +37,7 @@ import {
   userSyllabusPrefix,
 } from "./paths";
 import {
+  getQuotaBytes,
   getUsageBytes,
   headSize,
   parseIntEnv,
@@ -289,6 +292,12 @@ export default {
       }
       if (path === "/admin/item" && request.method === "DELETE") {
         return handleAdminDeleteItem(request, env);
+      }
+      if (path === "/admin/quota" && request.method === "PUT") {
+        return handleAdminSetQuota(request, env);
+      }
+      if (path === "/admin/quota" && request.method === "DELETE") {
+        return handleAdminClearQuota(request, env);
       }
 
       if (path === "/auth/zotero/start" && request.method === "POST") {
@@ -565,11 +574,11 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
   const auth = await requireUser(request, env);
   if (auth instanceof Response) return auth;
   const usage = await getUsageBytes(env, auth.userId);
-  const quota = parseIntEnv(env.USER_QUOTA_BYTES, 209715200);
+  const { quotaBytes } = await getQuotaBytes(env, auth.userId);
   return json({
     userId: auth.userId,
     usageBytes: usage,
-    quotaBytes: quota,
+    quotaBytes,
   });
 }
 
@@ -684,7 +693,7 @@ async function handlePutObject(request: Request, env: Env): Promise<Response> {
   }
 
   const maxObject = parseIntEnv(env.MAX_OBJECT_BYTES, 50 * 1024 * 1024);
-  const quota = parseIntEnv(env.USER_QUOTA_BYTES, 209715200);
+  const { quotaBytes: quota } = await getQuotaBytes(env, auth.userId);
 
   const buf = await request.arrayBuffer();
   const newSize = buf.byteLength;

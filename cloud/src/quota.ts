@@ -24,6 +24,49 @@ export async function setUsageBytes(
   await env.KV.put(`usage:${userId}`, String(Math.max(0, Math.floor(bytes))));
 }
 
+/** Global default from USER_QUOTA_BYTES (fallback 200 MB). */
+export function getDefaultQuotaBytes(env: Env): number {
+  return parseIntEnv(env.USER_QUOTA_BYTES, 209715200);
+}
+
+/**
+ * Effective quota for a user: KV `quota:{userId}` override if set,
+ * otherwise USER_QUOTA_BYTES.
+ */
+export async function getQuotaBytes(
+  env: Env,
+  userId: string,
+): Promise<{ quotaBytes: number; override: boolean }> {
+  const raw = await env.KV.get(`quota:${userId}`);
+  if (raw) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) {
+      return { quotaBytes: n, override: true };
+    }
+  }
+  return { quotaBytes: getDefaultQuotaBytes(env), override: false };
+}
+
+export async function setQuotaBytes(
+  env: Env,
+  userId: string,
+  bytes: number,
+): Promise<number> {
+  const n = Math.floor(bytes);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error("invalid_quota");
+  }
+  await env.KV.put(`quota:${userId}`, String(n));
+  return n;
+}
+
+export async function clearQuotaBytes(
+  env: Env,
+  userId: string,
+): Promise<void> {
+  await env.KV.delete(`quota:${userId}`);
+}
+
 /** Sum object sizes under the user prefix (reconcile). */
 export async function reconcileUsage(
   env: Env,

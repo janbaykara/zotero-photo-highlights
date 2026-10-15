@@ -19,6 +19,10 @@ Turn each surface on or off: Syllabus, Gallery, Home, Reading Schedule, Annotati
 
 Optionally generate an auto-managed **Reading Schedule** collection tree. See [Auto-managed folders](/zotero-syllabus/concepts/auto-managed-folders/).
 
+## Publish online
+
+Shows how much Cloudflare publish storage you have used versus your quota (after you have signed in by publishing once). To request a higher quota, email [zoterosyllabus.deodorant482@passmail.net](mailto:zoterosyllabus.deodorant482@passmail.net). See [Print, export, and publish](/zotero-syllabus/how-to/print-export-publish/).
+
 ## Per-syllabus overrides
 
 Nomenclature (week / class / session), priorities, bibliography, and class subcollections live on the syllabus header **Settings**, not only in Preferences.

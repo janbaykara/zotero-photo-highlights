@@ -18,6 +18,17 @@ pref-gallery-demo-alt =
 pref-home-title = 홈
 pref-home-demo-alt =
     .alt = Preview of Home view
+pref-publish-title = Publish online
+pref-publish-desc =
+    Storage used for syllabi and items you share via a public URL.
+pref-publish-storage = { $usage } of { $quota } used
+pref-publish-not-configured = Publish hosting is not configured.
+pref-publish-not-signed-in =
+    Sign in by publishing once to see your storage usage.
+pref-publish-loading = Loading storage usage…
+pref-publish-error = Could not load storage usage.
+pref-publish-quota-help =
+    Need more storage? Email zoterosyllabus.deodorant482@passmail.net.
 pref-advanced-title = 기타 설정
 pref-advanced-demo-alt =
     .alt = Preview of advanced editing

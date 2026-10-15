@@ -7,13 +7,21 @@ import {
 } from "./itemRefs";
 import {
   PathError,
+  assertSafeSegment,
   itemObjectKey,
   objectKey,
   publicUrlForItem,
   publicUrlForSyllabus,
   userSyllabusPrefix,
 } from "./paths";
-import { reconcileUsage } from "./quota";
+import {
+  clearQuotaBytes,
+  getDefaultQuotaBytes,
+  getQuotaBytes,
+  getUsageBytes,
+  reconcileUsage,
+  setQuotaBytes,
+} from "./quota";
 import { syllabusMetaFromCustomMetadata } from "./syllabusMeta";
 
 export type ShareKind = "syllabus" | "item";
@@ -47,11 +55,25 @@ export type PublishedShare = {
 /** @deprecated Prefer PublishedShare */
 export type PublishedSyllabus = PublishedShare;
 
+export type AdminUserSummary = {
+  userId: string;
+  usageBytes: number;
+  quotaBytes: number;
+  quotaOverride: boolean;
+  syllabusCount: number;
+  itemCount: number;
+  files: number;
+};
+
 export type AdminReport = {
   /** All shares (syllabi + item pages), sorted. */
   shares: PublishedShare[];
   /** Alias of shares filtered to syllabi (kept for chart helpers). */
   syllabi: PublishedShare[];
+  /** Per-user storage + effective quota, sorted by usage desc. */
+  users: AdminUserSummary[];
+  /** Default quota from USER_QUOTA_BYTES (bytes). */
+  defaultQuotaBytes: number;
   totalBytes: number;
   totalFiles: number;
   syllabusCount: number;
@@ -233,6 +255,17 @@ export async function listPublishedSyllabi(
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
 
+  // Item prefixes hold shared attachment files even when there is no item
+  // cover page (hasIndex). Keep their sizes for syllabus aggregation.
+  const itemPrefixStats = new Map<string, { bytes: number; files: number }>();
+  for (const row of byId.values()) {
+    if (row.kind !== "item") continue;
+    itemPrefixStats.set(shareId("item", row.userId, row.libraryId, row.itemKey), {
+      bytes: row.bytes,
+      files: row.files,
+    });
+  }
+
   const shares: PublishedShare[] = [];
   for (const row of byId.values()) {
     // Only rows with a public cover page (syllabus publish or Share via URL).
@@ -288,6 +321,39 @@ export async function listPublishedSyllabi(
     }
   }
 
+  // Attachments are stored under item prefixes, not the syllabus folder.
+  // Fold referenced item prefix sizes into each syllabus row.
+  await Promise.all(
+    shares
+      .filter((s) => s.kind === "syllabus")
+      .map(async (s) => {
+        try {
+          const prefix = userSyllabusPrefix(
+            s.userId,
+            s.libraryId,
+            s.collectionKey,
+          );
+          const itemKeys = await readSyllabusItemKeys(
+            env,
+            s.userId,
+            s.libraryId,
+            s.collectionKey,
+            prefix,
+          );
+          for (const itemKey of itemKeys) {
+            const stats = itemPrefixStats.get(
+              shareId("item", s.userId, s.libraryId, itemKey),
+            );
+            if (!stats) continue;
+            s.bytes += stats.bytes;
+            s.files += stats.files;
+          }
+        } catch {
+          // Leave syllabus chrome-only size if itemKeys cannot be read.
+        }
+      }),
+  );
+
   await attachIndexMeta(env, shares);
 
   shares.sort((a, b) => {
@@ -303,22 +369,55 @@ export async function listPublishedSyllabi(
     return b.bytes - a.bytes;
   });
 
-  let totalBytes = 0;
   let totalFiles = 0;
   let syllabusCount = 0;
   let itemCount = 0;
-  const users = new Set<string>();
+  const userIds = new Set<string>();
   const excludeFromChartKeys = new Set<string>();
+  const byUserAcc = new Map<
+    string,
+    { syllabusCount: number; itemCount: number; files: number }
+  >();
   for (const s of shares) {
-    totalBytes += s.bytes;
     totalFiles += s.files;
-    users.add(s.userId);
+    userIds.add(s.userId);
     if (s.kind === "syllabus") syllabusCount += 1;
     else itemCount += 1;
     if (s.dev) {
       excludeFromChartKeys.add(shareStatsKey(s));
     }
+    let acc = byUserAcc.get(s.userId);
+    if (!acc) {
+      acc = { syllabusCount: 0, itemCount: 0, files: 0 };
+      byUserAcc.set(s.userId, acc);
+    }
+    acc.files += s.files;
+    if (s.kind === "syllabus") acc.syllabusCount += 1;
+    else acc.itemCount += 1;
   }
+
+  const defaultQuotaBytes = getDefaultQuotaBytes(env);
+  // Prefer KV usage (same as /v1/me / prefs) — includes item-prefix files
+  // that are not listed as their own share rows.
+  const users: AdminUserSummary[] = await Promise.all(
+    [...byUserAcc.entries()].map(async ([userId, acc]) => {
+      const [{ quotaBytes, override }, usageBytes] = await Promise.all([
+        getQuotaBytes(env, userId),
+        getUsageBytes(env, userId),
+      ]);
+      return {
+        userId,
+        usageBytes,
+        quotaBytes,
+        quotaOverride: override,
+        syllabusCount: acc.syllabusCount,
+        itemCount: acc.itemCount,
+        files: acc.files,
+      };
+    }),
+  );
+  users.sort((a, b) => b.usageBytes - a.usageBytes || a.userId.localeCompare(b.userId));
+  const totalBytes = users.reduce((n, u) => n + u.usageBytes, 0);
 
   let views: ViewStats;
   try {
@@ -338,11 +437,13 @@ export async function listPublishedSyllabi(
   return {
     shares,
     syllabi: shares.filter((s) => s.kind === "syllabus"),
+    users,
+    defaultQuotaBytes,
     totalBytes,
     totalFiles,
     syllabusCount,
     itemCount,
-    userCount: users.size,
+    userCount: userIds.size,
     views,
   };
 }
@@ -507,6 +608,65 @@ function userSummary(rows: PublishedShare[]): string {
   return parts.join(", ") || "0 shares";
 }
 
+function quotaPct(usageBytes: number, quotaBytes: number): number {
+  if (!quotaBytes || quotaBytes <= 0) return 0;
+  return Math.min(999, Math.round((usageBytes / quotaBytes) * 100));
+}
+
+function renderUsersSummary(report: AdminReport): string {
+  if (report.users.length === 0) {
+    return "";
+  }
+  const rows = report.users
+    .map((u) => {
+      const pct = quotaPct(u.usageBytes, u.quotaBytes);
+      const override = u.quotaOverride
+        ? `<span class="type-pill type-override">Override</span>`
+        : `<span class="muted">default</span>`;
+      const shareParts: string[] = [];
+      if (u.syllabusCount) {
+        shareParts.push(
+          `${u.syllabusCount} ${u.syllabusCount === 1 ? "syllabus" : "syllabi"}`,
+        );
+      }
+      if (u.itemCount) {
+        shareParts.push(
+          `${u.itemCount} ${u.itemCount === 1 ? "item" : "items"}`,
+        );
+      }
+      const shares = shareParts.join(", ") || "0 shares";
+      return `<tr>
+  <td class="mono" data-sort="${escapeHtml(u.userId)}">${escapeHtml(u.userId)}</td>
+  <td class="num" data-sort="${u.usageBytes}" data-sort-type="num">${escapeHtml(formatBytes(u.usageBytes))}</td>
+  <td class="num" data-sort="${u.quotaBytes}" data-sort-type="num">${escapeHtml(formatBytes(u.quotaBytes))}</td>
+  <td class="num" data-sort="${pct}" data-sort-type="num">${pct}%</td>
+  <td data-sort="${escapeHtml(shares)}">${escapeHtml(shares)}</td>
+  <td data-sort="${u.quotaOverride ? "1" : "0"}">${override}</td>
+</tr>`;
+    })
+    .join("\n");
+  return `<section class="users-summary">
+  <h2>Users
+    <span class="muted">— default quota ${escapeHtml(formatBytes(report.defaultQuotaBytes))}</span>
+  </h2>
+  <table class="sortable">
+    <thead>
+      <tr>
+        <th scope="col" data-col="0"><button type="button" class="sort">User</button></th>
+        <th scope="col" class="num" data-col="1"><button type="button" class="sort">Used</button></th>
+        <th scope="col" class="num" data-col="2"><button type="button" class="sort">Quota</button></th>
+        <th scope="col" class="num" data-col="3"><button type="button" class="sort">%</button></th>
+        <th scope="col" data-col="4"><button type="button" class="sort">Shares</button></th>
+        <th scope="col" data-col="5"><button type="button" class="sort">Quota source</button></th>
+      </tr>
+    </thead>
+    <tbody>
+${rows}
+    </tbody>
+  </table>
+</section>`;
+}
+
 export function renderAdminHtml(report: AdminReport): string {
   const views = report.views;
   const byUser = new Map<string, PublishedShare[]>();
@@ -515,11 +675,21 @@ export function renderAdminHtml(report: AdminReport): string {
     list.push(s);
     byUser.set(s.userId, list);
   }
+  const userSummaryById = new Map(
+    report.users.map((u) => [u.userId, u] as const),
+  );
 
   const sections: string[] = [];
   for (const [userId, rows] of byUser) {
-    const userBytes = rows.reduce((n, r) => n + r.bytes, 0);
     const userFiles = rows.reduce((n, r) => n + r.files, 0);
+    const u = userSummaryById.get(userId);
+    const userBytes = u?.usageBytes ?? rows.reduce((n, r) => n + r.bytes, 0);
+    const quotaBytes = u?.quotaBytes ?? report.defaultQuotaBytes;
+    const pct = quotaPct(userBytes, quotaBytes);
+    const overrideBadge = u?.quotaOverride
+      ? ` <span class="type-pill type-override">Override</span>`
+      : "";
+    const quotaMbDefault = Math.round(quotaBytes / (1024 * 1024));
     const trs = rows
       .map((r) => {
         const key = shareStatsKey(r);
@@ -587,11 +757,20 @@ export function renderAdminHtml(report: AdminReport): string {
 </tr>`;
       })
       .join("\n");
-    sections.push(`<section>
+    sections.push(`<section data-user-id="${escapeHtml(userId)}">
   <h2>User <span class="mono">${escapeHtml(userId)}</span>
     <span class="muted">— ${escapeHtml(userSummary(rows))},
-    ${escapeHtml(formatBytes(userBytes))}, ${userFiles} file${userFiles === 1 ? "" : "s"}</span>
+    ${escapeHtml(formatBytes(userBytes))} / ${escapeHtml(formatBytes(quotaBytes))} (${pct}%),
+    ${userFiles} file${userFiles === 1 ? "" : "s"}</span>${overrideBadge}
   </h2>
+  <form class="quota-form" data-user-id="${escapeHtml(userId)}">
+    <label>Quota (MB)
+      <input type="number" class="quota-mb" min="1" step="1" value="${quotaMbDefault}" aria-label="Quota in megabytes for ${escapeHtml(userId)}">
+    </label>
+    <button type="submit" class="quota-set">Set quota</button>
+    <button type="button" class="quota-reset"${u?.quotaOverride ? "" : " disabled"}>Reset to default</button>
+    <span class="quota-status muted" aria-live="polite"></span>
+  </form>
   <table class="sortable">
     <thead>
       <tr>
@@ -617,10 +796,11 @@ ${trs}
 </section>`);
   }
 
+  const usersSummary = renderUsersSummary(report);
   const body =
     report.shares.length === 0
       ? `<p class="muted">No published syllabi or shared items found.</p>`
-      : sections.join("\n");
+      : `${usersSummary}\n${sections.join("\n")}`;
 
   const viewsTotal = views.available ? formatCount(views.pageViews30d) : "—";
   const downloadsTotal = views.available
@@ -776,6 +956,36 @@ ${trs}
       color: #92400e;
       background: #fef3c7;
     }
+    .type-pill.type-override {
+      color: #9a3412;
+      background: #ffedd5;
+    }
+    .quota-form {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem;
+      margin: 0 0 0.75rem; padding: 0.55rem 0.75rem;
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
+      font-size: 13px;
+    }
+    .quota-form label {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      color: #374151;
+    }
+    .quota-form input.quota-mb {
+      width: 5.5rem; padding: 0.25rem 0.4rem;
+      font: inherit; border: 1px solid #d1d5db; border-radius: 4px;
+    }
+    .quota-form button {
+      font: inherit; font-size: 12px; padding: 0.3rem 0.65rem;
+      border-radius: 4px; cursor: pointer;
+      border: 1px solid #d1d5db; background: #fff; color: #111;
+    }
+    .quota-form button:hover:not(:disabled) { background: #f3f4f6; }
+    .quota-form button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .quota-form button.quota-set {
+      background: #1d4ed8; color: #fff; border-color: #1d4ed8;
+    }
+    .quota-form button.quota-set:hover:not(:disabled) { background: #1e40af; }
+    .users-summary { margin-bottom: 0.5rem; }
     tr.is-dev td { background: #fffbeb; }
     td.dev-col { white-space: nowrap; }
     td.ann-col { text-align: center; white-space: nowrap; }
@@ -880,7 +1090,7 @@ ${trs}
     <h1>Syllabus publish admin</h1>
     <a href="https://dash.cloudflare.com/02bb1c1fe8fa155b4f84c74cbf9d8b36/web-analytics/overview?siteTag~in=d19e602cb91a4cfd9f55230ae70223d8&amp;excludeBots=Yes" target="_blank" rel="noopener noreferrer">Docs site analytics</a>
   </div>
-  <p class="muted">Storage and attachment counts from R2 for published syllabi and Share via URL item pages. Metadata is course code · institution for syllabi, or item type for items (from index.html customMetadata; re-publish/sync to populate older shares). <strong>Title</strong> links to the public page. <strong>Annotations</strong> is a checkbox when the share included annotations, otherwise —. Pages published from a <strong>development</strong> plugin build are marked in the <strong>Dev</strong> column (and amber title links); they are omitted from chart bar heights and 30-day header totals, but still appear in chart tooltips with a <span class="type-pill type-dev">Dev</span> badge (row-level counts still show). Page views, file downloads, and citation exports (RIS/BIB/RDF) are last-30-day totals from Analytics Engine. <strong>Docs site analytics</strong> opens Cloudflare Web Analytics for the GitHub Pages docs site. Use row checkboxes for <strong>bulk delete</strong>, or Delete on a single row (syllabus wipe or item page unpublish); the publisher can re-publish from the plugin.</p>
+  <p class="muted">User <strong>used</strong> totals come from KV usage (same as plugin Preferences / <code>/v1/me</code>). Syllabus row sizes include referenced item-prefix attachments (PDFs live under <code>items/…</code>, not the syllabus folder). The <strong>Users</strong> table also shows effective quota (default from <code>USER_QUOTA_BYTES</code>, or a per-user override). Set or reset quotas on each user section. Metadata is course code · institution for syllabi, or item type for items (from index.html customMetadata; re-publish/sync to populate older shares). <strong>Title</strong> links to the public page. <strong>Annotations</strong> is a checkbox when the share included annotations, otherwise —. Pages published from a <strong>development</strong> plugin build are marked in the <strong>Dev</strong> column (and amber title links); they are omitted from chart bar heights and 30-day header totals, but still appear in chart tooltips with a <span class="type-pill type-dev">Dev</span> badge (row-level counts still show). Page views, file downloads, and citation exports (RIS/BIB/RDF) are last-30-day totals from Analytics Engine. <strong>Docs site analytics</strong> opens Cloudflare Web Analytics for the GitHub Pages docs site. Use row checkboxes for <strong>bulk delete</strong>, or Delete on a single row (syllabus wipe or item page unpublish); the publisher can re-publish from the plugin.</p>
   <div class="bulk-bar" id="bulk-bar" aria-live="polite">
     <span class="bulk-count" id="bulk-count">0 selected</span>
     <button type="button" class="bulk-delete" id="bulk-delete">Delete selected</button>
@@ -1150,6 +1360,76 @@ ${trs}
         });
       });
     });
+
+    function quotaUrl(userId) {
+      var url = new URL("/admin/quota", location.origin);
+      url.searchParams.set("key", key);
+      url.searchParams.set("userId", userId);
+      return url.toString();
+    }
+
+    document.querySelectorAll("form.quota-form").forEach(function (form) {
+      var userId = form.getAttribute("data-user-id") || "";
+      var statusEl = form.querySelector(".quota-status");
+      var resetBtn = form.querySelector(".quota-reset");
+      var canReset = resetBtn && !resetBtn.disabled;
+      var setBusy = function (busy) {
+        form.querySelectorAll("button, input").forEach(function (el) {
+          if (el === resetBtn) {
+            el.disabled = busy || !canReset;
+          } else {
+            el.disabled = busy;
+          }
+        });
+      };
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (!key || !userId) return;
+        var mbInput = form.querySelector(".quota-mb");
+        var mb = Number(mbInput && mbInput.value);
+        if (!Number.isFinite(mb) || mb < 1) {
+          if (statusEl) statusEl.textContent = "Enter a positive MB value";
+          return;
+        }
+        var quotaBytes = Math.round(mb * 1024 * 1024);
+        setBusy(true);
+        if (statusEl) statusEl.textContent = "Saving…";
+        fetch(quotaUrl(userId), {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ quotaBytes: quotaBytes }),
+        })
+          .then(function (res) {
+            return res.json().then(function (body) {
+              if (!res.ok) throw new Error(body.message || body.error || ("HTTP " + res.status));
+              location.reload();
+            });
+          })
+          .catch(function (err) {
+            setBusy(false);
+            if (statusEl) statusEl.textContent = err.message || String(err);
+          });
+      });
+      if (resetBtn) {
+        resetBtn.addEventListener("click", function () {
+          if (!key || !userId || !canReset) return;
+          if (!confirm("Reset quota for " + userId + " to the default?")) return;
+          setBusy(true);
+          if (statusEl) statusEl.textContent = "Resetting…";
+          fetch(quotaUrl(userId), { method: "DELETE" })
+            .then(function (res) {
+              return res.json().then(function (body) {
+                if (!res.ok) throw new Error(body.message || body.error || ("HTTP " + res.status));
+                location.reload();
+              });
+            })
+            .catch(function (err) {
+              setBusy(false);
+              if (statusEl) statusEl.textContent = err.message || String(err);
+            });
+        });
+      }
+    });
   })();
   </script>
 </body>
@@ -1282,4 +1562,85 @@ export async function handleAdminDeleteItem(
     }
     throw e;
   }
+}
+
+/** Set a per-user storage quota override (KV `quota:{userId}`). */
+export async function handleAdminSetQuota(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!requireAdminKey(request, env)) {
+    return adminJson({ error: "not_found" }, 404);
+  }
+
+  const url = new URL(request.url);
+  const userIdRaw = url.searchParams.get("userId") || "";
+  let userId: string;
+  try {
+    userId = assertSafeSegment(userIdRaw, "userId");
+  } catch (e) {
+    if (e instanceof PathError) {
+      return adminJson({ error: "bad_path", message: e.message }, 400);
+    }
+    throw e;
+  }
+
+  let body: { quotaBytes?: unknown };
+  try {
+    body = (await request.json()) as { quotaBytes?: unknown };
+  } catch {
+    return adminJson({ error: "bad_json" }, 400);
+  }
+  const quotaBytes = Number(body.quotaBytes);
+  if (!Number.isFinite(quotaBytes) || quotaBytes <= 0) {
+    return adminJson(
+      { error: "invalid_quota", message: "quotaBytes must be a positive number" },
+      400,
+    );
+  }
+
+  try {
+    const stored = await setQuotaBytes(env, userId, quotaBytes);
+    return adminJson({
+      ok: true,
+      userId,
+      quotaBytes: stored,
+      override: true,
+    });
+  } catch {
+    return adminJson(
+      { error: "invalid_quota", message: "quotaBytes must be a positive number" },
+      400,
+    );
+  }
+}
+
+/** Clear a per-user quota override (back to USER_QUOTA_BYTES). */
+export async function handleAdminClearQuota(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!requireAdminKey(request, env)) {
+    return adminJson({ error: "not_found" }, 404);
+  }
+
+  const url = new URL(request.url);
+  const userIdRaw = url.searchParams.get("userId") || "";
+  let userId: string;
+  try {
+    userId = assertSafeSegment(userIdRaw, "userId");
+  } catch (e) {
+    if (e instanceof PathError) {
+      return adminJson({ error: "bad_path", message: e.message }, 400);
+    }
+    throw e;
+  }
+
+  await clearQuotaBytes(env, userId);
+  return adminJson({
+    ok: true,
+    userId,
+    quotaBytes: getDefaultQuotaBytes(env),
+    override: false,
+  });
 }
