@@ -1,6 +1,7 @@
 /** Context-menu flow: Share via URL / Unpublish item. */
 
 import { getString } from "./locale";
+import { formatPublishError, logPublishError } from "./formatPublishError";
 import {
   getPublishSession,
   isPublishApiConfigured,
@@ -13,7 +14,21 @@ import {
   unpublishItemFromCloud,
 } from "./publishItem";
 import { copyStringToClipboard } from "./clipboard";
-import { confirmPrompt, confirmPromptWithCheck } from "./window";
+import { alertPrompt, confirmPrompt, confirmPromptWithCheck } from "./window";
+
+function showItemShareFailure(
+  titleKey: "publish-error-item-title" | "publish-error-unpublish-title",
+  message: string,
+): void {
+  new ztoolkit.ProgressWindow(getString("app-name"), {
+    closeOnClick: true,
+    closeTime: 8000,
+  })
+    .createLine({ text: message, type: "fail" })
+    .show();
+  // Alert keeps the detail readable/copyable for bug reports (ProgressWindow is brief).
+  alertPrompt(getString(titleKey), message);
+}
 
 async function ensurePublishSignedIn(): Promise<boolean> {
   if (getPublishSession()) {
@@ -33,18 +48,12 @@ async function ensurePublishSignedIn(): Promise<boolean> {
     progress.close();
     return !!getPublishSession();
   } catch (err) {
-    ztoolkit.log("Item share sign-in failed:", err);
+    logPublishError("Item share sign-in failed", err);
     progress.close();
-    const message =
-      err instanceof Error && err.message === "publish_oauth_not_configured"
-        ? getString("progress-publish-oauth-unconfigured")
-        : getString("progress-publish-auth-failed");
-    new ztoolkit.ProgressWindow(getString("app-name"), {
-      closeOnClick: true,
-      closeTime: 5000,
-    })
-      .createLine({ text: message, type: "fail" })
-      .show();
+    const message = formatPublishError(err, {
+      fallback: "progress-publish-auth-failed",
+    });
+    showItemShareFailure("publish-error-item-title", message);
     return false;
   }
 }
@@ -169,17 +178,12 @@ export async function shareItemViaUrl(
       .show();
     Zotero.launchURL(publicUrl);
   } catch (err) {
-    ztoolkit.log("shareItemViaUrl failed:", err);
+    logPublishError("shareItemViaUrl failed", err);
     progress.close();
-    new ztoolkit.ProgressWindow(getString("app-name"), {
-      closeOnClick: true,
-      closeTime: 5000,
-    })
-      .createLine({
-        text: getString("progress-item-share-failed"),
-        type: "fail",
-      })
-      .show();
+    showItemShareFailure(
+      "publish-error-item-title",
+      formatPublishError(err, { fallback: "progress-item-share-failed" }),
+    );
   }
 }
 
@@ -224,16 +228,13 @@ export async function unpublishItemViaUrl(item: Zotero.Item): Promise<void> {
       })
       .show();
   } catch (err) {
-    ztoolkit.log("unpublishItemViaUrl failed:", err);
+    logPublishError("unpublishItemViaUrl failed", err);
     progress.close();
-    new ztoolkit.ProgressWindow(getString("app-name"), {
-      closeOnClick: true,
-      closeTime: 5000,
-    })
-      .createLine({
-        text: getString("progress-item-unpublish-failed"),
-        type: "fail",
-      })
-      .show();
+    showItemShareFailure(
+      "publish-error-unpublish-title",
+      formatPublishError(err, {
+        fallback: "progress-item-unpublish-failed",
+      }),
+    );
   }
 }

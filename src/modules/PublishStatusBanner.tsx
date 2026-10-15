@@ -99,7 +99,12 @@ export function PublishStatusBanner({
             />
           ) : null}
           {statusText && (busy || isError || !url) ? (
-            <span className="font-medium truncate min-w-0">
+            <span
+              className={twMerge(
+                "font-medium min-w-0",
+                isError ? "whitespace-normal break-words" : "truncate",
+              )}
+            >
               {busy ? busyHeading : null}
               {busy && statusText ? " — " : null}
               {statusText}

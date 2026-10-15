@@ -27,6 +27,15 @@ If **Class subcollections** is on, do not edit those child folders by hand. Re-a
 - Attachment availability follows Zotero/group rules; public groups still do not expose attachment files the same way.
 - Storage quotas apply on the publish Worker. See [Print, export, and publish](/zotero-syllabus/how-to/print-export-publish/).
 
+When publish or **Share via URL** fails, Zotero Syllabus shows a concrete reason when it can (for example **storage quota exceeded** with how much you have used, **file too large**, sign-in expired, or a network/HTTP error). If the cause is unknown, the message includes a short technical detail in parentheses — include that text in a [bug report](https://github.com/janbaykara/zotero-syllabus/issues).
+
+Common fixes:
+
+- **Quota exceeded** — unpublish an old share, or turn off **Include attachments** / share fewer PDFs.
+- **File too large** — skip that attachment or split the share.
+- **Sign-in expired / timed out** — try again; complete Zotero authorization in the browser when prompted.
+- **Could not reach the publish server** — check your network and try later.
+
 ## Styling looks off on Zotero 7
 
 Minor styling issues are expected on Zotero 7. Prefer Zotero 8, 9, or 10.

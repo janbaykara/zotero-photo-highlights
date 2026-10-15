@@ -1,6 +1,7 @@
 /** Shared progress UI + auth for collection publish / unpublish. */
 
 import { getString } from "./locale";
+import { formatPublishError, logPublishError } from "./formatPublishError";
 import {
   getPublishSession,
   isPublishApiConfigured,
@@ -14,7 +15,7 @@ import { setPublishedSyllabusUrl } from "./publishUrls";
 import { getPublishedShareOptions } from "./publishShareOptions";
 import { openCollectionShareDialog } from "../modules/openCollectionShareDialog";
 import type { CollectionShareOptions, ShareKind } from "./sharePayload";
-import { confirmPrompt } from "./window";
+import { alertPrompt, confirmPrompt } from "./window";
 
 export type CollectionPublishUiStatus =
   | { kind: "idle" }
@@ -48,16 +49,20 @@ async function ensurePublishSignedIn(
     progress.close();
     return true;
   } catch (err) {
-    ztoolkit.log("Publish sign-in failed:", err);
+    logPublishError("Publish sign-in failed", err);
+    const message = formatPublishError(err, {
+      fallback: "progress-publish-auth-failed",
+    });
     progress.changeLine({
-      text: getString("progress-publish-auth-failed"),
+      text: message,
       type: "fail",
     });
-    progress.close();
+    progress.startCloseTimer(8000);
     setStatus({
       kind: "error",
-      message: getString("progress-publish-auth-failed"),
+      message,
     });
+    alertPrompt(getString("publish-error-title"), message);
     return false;
   }
 }
@@ -173,11 +178,16 @@ export async function runCollectionPublish(opts: {
     progress.startCloseTimer(3000);
     return true;
   } catch (err) {
-    ztoolkit.log("Collection publish failed:", err);
-    const message = getString("progress-publish-failed");
+    logPublishError("Collection publish failed", err);
+    const fallback =
+      shareOptions.kind === "gallery"
+        ? "progress-publish-failed-gallery"
+        : "progress-publish-failed";
+    const message = formatPublishError(err, { fallback });
     opts.setStatus({ kind: "error", message });
     progress.changeLine({ text: message, type: "fail" });
-    progress.startCloseTimer(5000);
+    progress.startCloseTimer(8000);
+    alertPrompt(getString("publish-error-title"), message);
     return false;
   }
 }
@@ -213,11 +223,15 @@ export async function runCollectionUnpublish(opts: {
       .show();
     return true;
   } catch (err) {
-    ztoolkit.log("Unpublish failed:", err);
+    logPublishError("Unpublish failed", err);
+    const message = formatPublishError(err, {
+      fallback: "progress-publish-unpublish-failed",
+    });
     opts.setStatus({
       kind: "error",
-      message: getString("progress-publish-unpublish-failed"),
+      message,
     });
+    alertPrompt(getString("publish-error-unpublish-title"), message);
     return false;
   }
 }
