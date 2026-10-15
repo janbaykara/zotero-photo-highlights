@@ -12,6 +12,13 @@ import {
   getPublishApiBaseUrl,
   patchPublishItemRefs,
 } from "./publishAuth";
+import {
+  isPublishQuotaExceeded,
+  publishRemotePathExisted,
+  rollbackPublishSession,
+  type PublishSessionSyllabusRef,
+  type PublishSessionUpload,
+} from "./publishSessionRollback";
 import { clearPublishedSyllabusUrl } from "./publishUrls";
 import { clearPublishedShareOptions } from "./publishShareOptions";
 import {
@@ -330,190 +337,239 @@ export async function publishCollectionToCloud(opts: {
     picksByItemKey.set(pick.itemKey, list);
   }
 
-  opts.onProgress?.("preparing");
-  for (const citation of citationUploads) {
-    const bytes = new TextEncoder().encode(citation.text);
-    const remote = remoteObjects[citation.relPath];
-    if (remote && remote.size === bytes.byteLength) {
-      uploadedCitationPaths.add(citation.relPath);
-      continue;
-    }
-    try {
-      const result = await putPublishObject({
-        token: session.token,
-        target: syllabusTarget,
-        relPath: citation.relPath,
-        bytes,
-      });
-      publicUrl = result.publicUrl || publicUrl;
-      uploadedCitationPaths.add(citation.relPath);
-    } catch (err) {
-      ztoolkit.log(`Citation upload failed for ${citation.relPath}:`, err);
-    }
-  }
-
-  for (const itemKey of progressItemKeys) {
-    opts.onProgress?.("upload", itemsDone + 1, itemTotal);
-    for (const pick of picksByItemKey.get(itemKey) || []) {
-      const path = await pick.attachment.getFilePathAsync?.();
-      if (!path) continue;
-      const fingerprint = await localFileFingerprint(path);
-      const itemObjects = itemObjectsByKey.get(pick.itemKey) || {};
-      const remote = itemObjects[pick.relPath];
-      const already =
-        remote &&
-        remoteMatchesLocal({
-          exists: true,
-          remoteSize: remote.size,
-          remoteFingerprint: remote.fingerprint,
-          localFingerprint: fingerprint,
-        });
-      if (!already) {
-        const bytes = await readAttachmentBytes(pick.attachment);
-        if (bytes?.length) {
-          await putPublishObject({
-            token: session.token,
-            target: { kind: "item", libraryId, itemKey: pick.itemKey },
-            relPath: pick.relPath,
-            bytes,
-            fingerprint,
-          });
-        }
-      }
-    }
-    itemsDone += 1;
-  }
-  if (!progressItemKeys.length) {
-    opts.onProgress?.("upload", itemTotal, itemTotal);
-  }
-
+  const sessionUploads: PublishSessionUpload[] = [];
+  const newSyllabusRefs: PublishSessionSyllabusRef[] = [];
   const previousSet = new Set(previousItemKeys);
   const newSet = new Set(newItemKeys);
-  for (const itemKey of newItemKeys) {
-    try {
-      await patchPublishItemRefs({
-        token: session.token,
-        libraryId,
-        itemKey,
-        addSyllabus: collectionKey,
-      });
-    } catch (err) {
-      ztoolkit.log("addSyllabus ref failed", itemKey, err);
-    }
-  }
-  for (const itemKey of previousSet) {
-    if (newSet.has(itemKey)) continue;
-    try {
-      await patchPublishItemRefs({
-        token: session.token,
-        libraryId,
-        itemKey,
-        removeSyllabus: collectionKey,
-      });
-    } catch (err) {
-      ztoolkit.log("removeSyllabus ref failed", itemKey, err);
-    }
-  }
 
-  opts.onProgress?.("preparing");
-  await putPublishObject({
-    token: session.token,
-    target: syllabusTarget,
-    relPath: PUBLISH_ITEM_KEYS_JSON,
-    bytes: new TextEncoder().encode(JSON.stringify({ itemKeys: newItemKeys })),
-  });
-
-  for (const relPath of Object.keys(remoteObjects)) {
-    if (!relPath.startsWith("files/")) continue;
-    try {
-      await deletePublishObject({
-        token: session.token,
-        target: syllabusTarget,
-        relPath,
-      });
-    } catch (err) {
-      ztoolkit.log("legacy file delete failed", relPath, err);
+  const trackPut = (
+    target: PublishTarget,
+    relPath: string,
+    objects: Record<string, { size?: number } | undefined> | null | undefined,
+  ) => {
+    if (!publishRemotePathExisted(objects, relPath)) {
+      sessionUploads.push({ target, relPath });
     }
-  }
+  };
 
-  if (ogImageBytes && ogImageBytes.byteLength) {
-    try {
-      const fingerprint = bytesContentFingerprint(ogImageBytes);
-      const remote = remoteObjects[PUBLISH_OG_IMAGE];
-      if (!(
-        remote &&
-        remoteMatchesLocal({
-          exists: true,
-          remoteSize: remote.size,
-          remoteFingerprint: remote.fingerprint,
-          localFingerprint: fingerprint,
-        })
-      )) {
+  try {
+    opts.onProgress?.("preparing");
+    for (const citation of citationUploads) {
+      const bytes = new TextEncoder().encode(citation.text);
+      const remote = remoteObjects[citation.relPath];
+      if (remote && remote.size === bytes.byteLength) {
+        uploadedCitationPaths.add(citation.relPath);
+        continue;
+      }
+      try {
         const result = await putPublishObject({
           token: session.token,
           target: syllabusTarget,
-          relPath: PUBLISH_OG_IMAGE,
-          bytes: ogImageBytes,
-          fingerprint,
+          relPath: citation.relPath,
+          bytes,
         });
+        trackPut(syllabusTarget, citation.relPath, remoteObjects);
         publicUrl = result.publicUrl || publicUrl;
+        uploadedCitationPaths.add(citation.relPath);
+      } catch (err) {
+        if (isPublishQuotaExceeded(err)) throw err;
+        ztoolkit.log(`Citation upload failed for ${citation.relPath}:`, err);
       }
-      ogImageReady = true;
-    } catch (err) {
-      ztoolkit.log("OG image upload failed:", err);
     }
-  }
 
-  await putPublishObject({
-    token: session.token,
-    target: syllabusTarget,
-    relPath: SHARE_JSON,
-    bytes: new TextEncoder().encode(shareJsonText),
-  });
+    for (const itemKey of progressItemKeys) {
+      opts.onProgress?.("upload", itemsDone + 1, itemTotal);
+      const itemTarget: PublishTarget = {
+        kind: "item",
+        libraryId,
+        itemKey,
+      };
+      const itemObjects = itemObjectsByKey.get(itemKey) || {};
+      for (const pick of picksByItemKey.get(itemKey) || []) {
+        const path = await pick.attachment.getFilePathAsync?.();
+        if (!path) continue;
+        const fingerprint = await localFileFingerprint(path);
+        const remote = itemObjects[pick.relPath];
+        const already =
+          remote &&
+          remoteMatchesLocal({
+            exists: true,
+            remoteSize: remote.size,
+            remoteFingerprint: remote.fingerprint,
+            localFingerprint: fingerprint,
+          });
+        if (!already) {
+          const bytes = await readAttachmentBytes(pick.attachment);
+          if (bytes?.length) {
+            await putPublishObject({
+              token: session.token,
+              target: itemTarget,
+              relPath: pick.relPath,
+              bytes,
+              fingerprint,
+            });
+            trackPut(itemTarget, pick.relPath, itemObjects);
+          }
+        }
+      }
+      itemsDone += 1;
+    }
+    if (!progressItemKeys.length) {
+      opts.onProgress?.("upload", itemTotal, itemTotal);
+    }
 
-  await putPublishObject({
-    token: session.token,
-    target: syllabusTarget,
-    relPath: SHARE_VIEWER_JS,
-    bytes: new TextEncoder().encode(viewerAssets.js),
-  });
+    for (const itemKey of newItemKeys) {
+      try {
+        await patchPublishItemRefs({
+          token: session.token,
+          libraryId,
+          itemKey,
+          addSyllabus: collectionKey,
+        });
+        if (!previousSet.has(itemKey)) {
+          newSyllabusRefs.push({ libraryId, itemKey, collectionKey });
+        }
+      } catch (err) {
+        if (isPublishQuotaExceeded(err)) throw err;
+        ztoolkit.log("addSyllabus ref failed", itemKey, err);
+      }
+    }
+    for (const itemKey of previousSet) {
+      if (newSet.has(itemKey)) continue;
+      try {
+        await patchPublishItemRefs({
+          token: session.token,
+          libraryId,
+          itemKey,
+          removeSyllabus: collectionKey,
+        });
+      } catch (err) {
+        ztoolkit.log("removeSyllabus ref failed", itemKey, err);
+      }
+    }
 
-  await putPublishObject({
-    token: session.token,
-    target: syllabusTarget,
-    relPath: SHARE_VIEWER_CSS,
-    bytes: new TextEncoder().encode(viewerAssets.css),
-  });
+    opts.onProgress?.("preparing");
+    await putPublishObject({
+      token: session.token,
+      target: syllabusTarget,
+      relPath: PUBLISH_ITEM_KEYS_JSON,
+      bytes: new TextEncoder().encode(
+        JSON.stringify({ itemKeys: newItemKeys }),
+      ),
+    });
+    trackPut(syllabusTarget, PUBLISH_ITEM_KEYS_JSON, remoteObjects);
 
-  const htmlContent = buildShareIndexHtml({
-    title: shareDoc.title,
-    description: shareDoc.description,
-    canonicalUrl: publicUrl,
-    ogImageUrl: ogImageReady ? `${publicUrl}${PUBLISH_OG_IMAGE}` : undefined,
-    // COinS in the static shell — Connector multi-detect before viewer.js runs.
-    bibliographyHtml: bibliographyHtml || shareDoc.bibliographyHtml,
-  });
+    for (const relPath of Object.keys(remoteObjects)) {
+      if (!relPath.startsWith("files/")) continue;
+      try {
+        await deletePublishObject({
+          token: session.token,
+          target: syllabusTarget,
+          relPath,
+        });
+      } catch (err) {
+        ztoolkit.log("legacy file delete failed", relPath, err);
+      }
+    }
 
-  const result = await putPublishObject({
-    token: session.token,
-    target: syllabusTarget,
-    relPath: "index.html",
-    bytes: new TextEncoder().encode(htmlContent),
-    syllabusMeta: {
+    if (ogImageBytes && ogImageBytes.byteLength) {
+      try {
+        const fingerprint = bytesContentFingerprint(ogImageBytes);
+        const remote = remoteObjects[PUBLISH_OG_IMAGE];
+        if (!(
+          remote &&
+          remoteMatchesLocal({
+            exists: true,
+            remoteSize: remote.size,
+            remoteFingerprint: remote.fingerprint,
+            localFingerprint: fingerprint,
+          })
+        )) {
+          const result = await putPublishObject({
+            token: session.token,
+            target: syllabusTarget,
+            relPath: PUBLISH_OG_IMAGE,
+            bytes: ogImageBytes,
+            fingerprint,
+          });
+          trackPut(syllabusTarget, PUBLISH_OG_IMAGE, remoteObjects);
+          publicUrl = result.publicUrl || publicUrl;
+        }
+        ogImageReady = true;
+      } catch (err) {
+        if (isPublishQuotaExceeded(err)) throw err;
+        ztoolkit.log("OG image upload failed:", err);
+      }
+    }
+
+    await putPublishObject({
+      token: session.token,
+      target: syllabusTarget,
+      relPath: SHARE_JSON,
+      bytes: new TextEncoder().encode(shareJsonText),
+    });
+    trackPut(syllabusTarget, SHARE_JSON, remoteObjects);
+
+    await putPublishObject({
+      token: session.token,
+      target: syllabusTarget,
+      relPath: SHARE_VIEWER_JS,
+      bytes: new TextEncoder().encode(viewerAssets.js),
+    });
+    trackPut(syllabusTarget, SHARE_VIEWER_JS, remoteObjects);
+
+    await putPublishObject({
+      token: session.token,
+      target: syllabusTarget,
+      relPath: SHARE_VIEWER_CSS,
+      bytes: new TextEncoder().encode(viewerAssets.css),
+    });
+    trackPut(syllabusTarget, SHARE_VIEWER_CSS, remoteObjects);
+
+    const htmlContent = buildShareIndexHtml({
       title: shareDoc.title,
-      courseCode: opts.courseCode || shareDoc.syllabus?.courseCode || "",
-      institution: opts.institution || shareDoc.syllabus?.institution || "",
-      annotations: opts.shareOptions.includeAnnotations ? "y" : "n",
-      shareKind: opts.shareOptions.kind,
-      ...(isDevelopmentEnv() ? { dev: "y" } : {}),
-    },
-  });
-  publicUrl = result.publicUrl || publicUrl;
+      description: shareDoc.description,
+      canonicalUrl: publicUrl,
+      ogImageUrl: ogImageReady ? `${publicUrl}${PUBLISH_OG_IMAGE}` : undefined,
+      // COinS in the static shell — Connector multi-detect before viewer.js runs.
+      bibliographyHtml: bibliographyHtml || shareDoc.bibliographyHtml,
+    });
 
-  if (!publicUrl) {
-    throw new Error("publish_no_url");
+    const result = await putPublishObject({
+      token: session.token,
+      target: syllabusTarget,
+      relPath: "index.html",
+      bytes: new TextEncoder().encode(htmlContent),
+      syllabusMeta: {
+        title: shareDoc.title,
+        courseCode: opts.courseCode || shareDoc.syllabus?.courseCode || "",
+        institution: opts.institution || shareDoc.syllabus?.institution || "",
+        annotations: opts.shareOptions.includeAnnotations ? "y" : "n",
+        shareKind: opts.shareOptions.kind,
+        ...(isDevelopmentEnv() ? { dev: "y" } : {}),
+      },
+    });
+    // Successful index write commits the publish — do not roll back after this.
+    publicUrl = result.publicUrl || publicUrl;
+    sessionUploads.length = 0;
+    newSyllabusRefs.length = 0;
+
+    if (!publicUrl) {
+      throw new Error("publish_no_url");
+    }
+    return { publicUrl };
+  } catch (err) {
+    ztoolkit.log(
+      "Collection publish failed; rolling back new session uploads",
+      err,
+    );
+    await rollbackPublishSession({
+      token: session.token,
+      uploads: sessionUploads,
+      newSyllabusRefs,
+    });
+    throw err;
   }
-  return { publicUrl };
 }
 
 export async function unpublishCollectionFromCloud(opts: {

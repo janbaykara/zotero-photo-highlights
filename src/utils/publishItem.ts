@@ -48,6 +48,12 @@ import {
 import { PUBLISH_OG_IMAGE, bytesContentFingerprint } from "./publishOgImage";
 import { generateBibliographyForPrint } from "@janbaykara/zotero-csl";
 import { loadShareCoverCss } from "./loadPublishViewerAssets";
+import {
+  isPublishQuotaExceeded,
+  publishRemotePathExisted,
+  rollbackPublishSession,
+  type PublishSessionUpload,
+} from "./publishSessionRollback";
 import { pickBestPublishAttachment } from "./publishSyllabus";
 import type { PublishTarget } from "./publishTarget";
 import { fallbackItemsAsZoteroRdf } from "./rdf";
@@ -330,83 +336,27 @@ export async function publishItemToCloud(opts: {
     picks.length + citationUploads.length + (cover.jpegBytes ? 1 : 0) + 1;
   let done = 0;
   const uploadedFiles: ItemShareFileLink[] = [];
+  const sessionUploads: PublishSessionUpload[] = [];
+  const hadItemPage = publishRemotePathExisted(remoteObjects, "index.html");
+  let setItemPage = false;
 
-  for (const pick of picks) {
-    opts.onProgress?.("upload", done + 1, total);
-    const path = await pick.attachment.getFilePathAsync?.();
-    if (!path) {
-      done += 1;
-      continue;
+  const trackPut = (relPath: string) => {
+    if (!publishRemotePathExisted(remoteObjects, relPath)) {
+      sessionUploads.push({ target, relPath });
     }
-    const fingerprint = await localFileFingerprint(path);
-    const remote = remoteObjects[pick.relPath];
-    if (
-      remote &&
-      remoteMatchesLocal({
-        exists: true,
-        remoteSize: remote.size,
-        remoteFingerprint: remote.fingerprint,
-        localFingerprint: fingerprint,
-      })
-    ) {
-      uploadedFiles.push({
-        relPath: pick.relPath,
-        label: pick.label,
-        contentType: pick.contentType,
-        embeddable: pick.embeddable,
-      });
-      done += 1;
-      continue;
-    }
-    const bytes = await readAttachmentBytes(pick.attachment);
-    if (!bytes?.length) {
-      done += 1;
-      continue;
-    }
-    await putPublishObject({
-      token: session.token,
-      target,
-      relPath: pick.relPath,
-      bytes,
-      fingerprint,
-    });
-    uploadedFiles.push({
-      relPath: pick.relPath,
-      label: pick.label,
-      contentType: pick.contentType,
-      embeddable: pick.embeddable,
-    });
-    done += 1;
-  }
+  };
 
-  for (const citation of citationUploads) {
-    opts.onProgress?.("upload", done + 1, total);
-    const bytes = new TextEncoder().encode(citation.text);
-    const remote = remoteObjects[citation.relPath];
-    if (remote && remote.size === bytes.byteLength) {
-      done += 1;
-      continue;
-    }
-    try {
-      await putPublishObject({
-        token: session.token,
-        target,
-        relPath: citation.relPath,
-        bytes,
-      });
-    } catch (err) {
-      ztoolkit.log("item citation upload failed", citation.relPath, err);
-    }
-    done += 1;
-  }
-
-  let ogImageReady = false;
-  if (cover.jpegBytes?.byteLength) {
-    opts.onProgress?.("upload", done + 1, total);
-    try {
-      const fingerprint = bytesContentFingerprint(cover.jpegBytes);
-      const remote = remoteObjects[PUBLISH_OG_IMAGE];
-      if (!(
+  try {
+    for (const pick of picks) {
+      opts.onProgress?.("upload", done + 1, total);
+      const path = await pick.attachment.getFilePathAsync?.();
+      if (!path) {
+        done += 1;
+        continue;
+      }
+      const fingerprint = await localFileFingerprint(path);
+      const remote = remoteObjects[pick.relPath];
+      if (
         remote &&
         remoteMatchesLocal({
           exists: true,
@@ -414,124 +364,209 @@ export async function publishItemToCloud(opts: {
           remoteFingerprint: remote.fingerprint,
           localFingerprint: fingerprint,
         })
-      )) {
+      ) {
+        uploadedFiles.push({
+          relPath: pick.relPath,
+          label: pick.label,
+          contentType: pick.contentType,
+          embeddable: pick.embeddable,
+        });
+        done += 1;
+        continue;
+      }
+      const bytes = await readAttachmentBytes(pick.attachment);
+      if (!bytes?.length) {
+        done += 1;
+        continue;
+      }
+      await putPublishObject({
+        token: session.token,
+        target,
+        relPath: pick.relPath,
+        bytes,
+        fingerprint,
+      });
+      trackPut(pick.relPath);
+      uploadedFiles.push({
+        relPath: pick.relPath,
+        label: pick.label,
+        contentType: pick.contentType,
+        embeddable: pick.embeddable,
+      });
+      done += 1;
+    }
+
+    for (const citation of citationUploads) {
+      opts.onProgress?.("upload", done + 1, total);
+      const bytes = new TextEncoder().encode(citation.text);
+      const remote = remoteObjects[citation.relPath];
+      if (remote && remote.size === bytes.byteLength) {
+        done += 1;
+        continue;
+      }
+      try {
         await putPublishObject({
           token: session.token,
           target,
-          relPath: PUBLISH_OG_IMAGE,
-          bytes: cover.jpegBytes,
-          fingerprint,
+          relPath: citation.relPath,
+          bytes,
         });
+        trackPut(citation.relPath);
+      } catch (err) {
+        if (isPublishQuotaExceeded(err)) throw err;
+        ztoolkit.log("item citation upload failed", citation.relPath, err);
       }
-      ogImageReady = true;
-    } catch (err) {
-      ztoolkit.log("item og-image upload failed:", err);
+      done += 1;
     }
-    done += 1;
-  }
 
-  await patchPublishItemRefs({
-    token: session.token,
-    libraryId,
-    itemKey,
-    setPage: true,
-  });
+    let ogImageReady = false;
+    if (cover.jpegBytes?.byteLength) {
+      opts.onProgress?.("upload", done + 1, total);
+      try {
+        const fingerprint = bytesContentFingerprint(cover.jpegBytes);
+        const remote = remoteObjects[PUBLISH_OG_IMAGE];
+        if (!(
+          remote &&
+          remoteMatchesLocal({
+            exists: true,
+            remoteSize: remote.size,
+            remoteFingerprint: remote.fingerprint,
+            localFingerprint: fingerprint,
+          })
+        )) {
+          await putPublishObject({
+            token: session.token,
+            target,
+            relPath: PUBLISH_OG_IMAGE,
+            bytes: cover.jpegBytes,
+            fingerprint,
+          });
+          trackPut(PUBLISH_OG_IMAGE);
+        }
+        ogImageReady = true;
+      } catch (err) {
+        if (isPublishQuotaExceeded(err)) throw err;
+        ztoolkit.log("item og-image upload failed:", err);
+      }
+      done += 1;
+    }
 
-  const embed =
-    uploadedFiles.find((f) => f.embeddable) ||
-    uploadedFiles.find((f) => f.relPath.toLowerCase().endsWith(".pdf"));
+    await patchPublishItemRefs({
+      token: session.token,
+      libraryId,
+      itemKey,
+      setPage: true,
+    });
+    setItemPage = true;
 
-  let itemTypeLabel = String(item.itemType || "");
-  try {
-    itemTypeLabel = String(
-      Zotero.ItemTypes.getLocalizedString?.(item.itemTypeID) || itemTypeLabel,
-    );
-  } catch {
-    // keep fallback
-  }
+    const embed =
+      uploadedFiles.find((f) => f.embeddable) ||
+      uploadedFiles.find((f) => f.relPath.toLowerCase().endsWith(".pdf"));
 
-  let annotations: ItemShareAnnotation[] | undefined;
-  if (opts.includeAnnotations) {
-    opts.onProgress?.("annotations");
+    let itemTypeLabel = String(item.itemType || "");
     try {
-      annotations = await collectItemShareAnnotations(item);
+      itemTypeLabel = String(
+        Zotero.ItemTypes.getLocalizedString?.(item.itemTypeID) || itemTypeLabel,
+      );
+    } catch {
+      // keep fallback
+    }
+
+    let annotations: ItemShareAnnotation[] | undefined;
+    if (opts.includeAnnotations) {
+      opts.onProgress?.("annotations");
+      try {
+        annotations = await collectItemShareAnnotations(item);
+      } catch (err) {
+        ztoolkit.log("item share annotations collect failed:", err);
+        annotations = [];
+      }
+    }
+
+    const title = itemShareDisplayTitle(item);
+    const coverCss = await loadShareCoverCss().catch((err) => {
+      ztoolkit.log("item share cover CSS load failed:", err);
+      return "";
+    });
+
+    // Zotero Connector: Highwire meta + COinS from a one-item CSL bibliography.
+    const pdfFile = uploadedFiles.find((f) =>
+      f.relPath.toLowerCase().endsWith(".pdf"),
+    );
+    const highwireMetaHtml = buildHighwireMetaTags(item, {
+      pageUrl: publicUrl,
+      pdfUrl: pdfFile ? `${publicUrl}${pdfFile.relPath}` : undefined,
+    });
+    let coinsHtml = "";
+    try {
+      const coinsBib = await generateBibliographyForPrint([item], null);
+      if (coinsBib?.isHtml) {
+        coinsHtml = extractCoinsSpans(coinsBib.content);
+      }
     } catch (err) {
-      ztoolkit.log("item share annotations collect failed:", err);
-      annotations = [];
+      ztoolkit.log("item share COinS failed:", err);
     }
-  }
 
-  const title = itemShareDisplayTitle(item);
-  const coverCss = await loadShareCoverCss().catch((err) => {
-    ztoolkit.log("item share cover CSS load failed:", err);
-    return "";
-  });
-
-  // Zotero Connector: Highwire meta + COinS from a one-item CSL bibliography.
-  const pdfFile = uploadedFiles.find((f) =>
-    f.relPath.toLowerCase().endsWith(".pdf"),
-  );
-  const highwireMetaHtml = buildHighwireMetaTags(item, {
-    pageUrl: publicUrl,
-    pdfUrl: pdfFile ? `${publicUrl}${pdfFile.relPath}` : undefined,
-  });
-  let coinsHtml = "";
-  try {
-    const coinsBib = await generateBibliographyForPrint([item], null);
-    if (coinsBib?.isHtml) {
-      coinsHtml = extractCoinsSpans(coinsBib.content);
-    }
-  } catch (err) {
-    ztoolkit.log("item share COinS failed:", err);
-  }
-
-  const html = buildItemShareHtml({
-    title,
-    creators: getItemCreatorLine(item),
-    itemType: String(item.itemType || ""),
-    itemTypeLabel,
-    description: getItemAbstractSnippet(item).slice(0, 300),
-    canonicalUrl: publicUrl,
-    coverDataUrl: cover.dataUrl,
-    coverPlaceholder: cover.placeholder,
-    coverCss,
-    ogImageUrl: ogImageReady ? `${publicUrl}${PUBLISH_OG_IMAGE}` : undefined,
-    metaRows: collectItemShareMeta(item),
-    citationHtml: citationHtml
-      ? citationHtml.replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      : undefined,
-    files: uploadedFiles,
-    embedRelPath: embed?.relPath || null,
-    citationDownloads: {
-      risHref: hasRis ? PUBLISH_BIBLIOGRAPHY_RIS : undefined,
-      bibHref: hasBib ? PUBLISH_BIBLIOGRAPHY_BIB : undefined,
-      rdfHref: hasRdf ? PUBLISH_BIBLIOGRAPHY_RDF : undefined,
-    },
-    annotations,
-    highwireMetaHtml,
-    coinsHtml,
-  });
-
-  opts.onProgress?.("upload", done + 1, total);
-  const result = await putPublishObject({
-    token: session.token,
-    target,
-    relPath: "index.html",
-    bytes: new TextEncoder().encode(html),
-    syllabusMeta: {
+    const html = buildItemShareHtml({
       title,
-      itemType: itemTypeLabel,
-      annotations: opts.includeAnnotations ? "y" : "n",
-      ...(isDevelopmentEnv() ? { dev: "y" } : {}),
-    },
-  });
-  publicUrl = result.publicUrl || publicUrl;
-  if (!publicUrl.endsWith("/")) {
-    publicUrl = `${publicUrl}/`;
-  }
+      creators: getItemCreatorLine(item),
+      itemType: String(item.itemType || ""),
+      itemTypeLabel,
+      description: getItemAbstractSnippet(item).slice(0, 300),
+      canonicalUrl: publicUrl,
+      coverDataUrl: cover.dataUrl,
+      coverPlaceholder: cover.placeholder,
+      coverCss,
+      ogImageUrl: ogImageReady ? `${publicUrl}${PUBLISH_OG_IMAGE}` : undefined,
+      metaRows: collectItemShareMeta(item),
+      citationHtml: citationHtml
+        ? citationHtml.replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        : undefined,
+      files: uploadedFiles,
+      embedRelPath: embed?.relPath || null,
+      citationDownloads: {
+        risHref: hasRis ? PUBLISH_BIBLIOGRAPHY_RIS : undefined,
+        bibHref: hasBib ? PUBLISH_BIBLIOGRAPHY_BIB : undefined,
+        rdfHref: hasRdf ? PUBLISH_BIBLIOGRAPHY_RDF : undefined,
+      },
+      annotations,
+      highwireMetaHtml,
+      coinsHtml,
+    });
 
-  await rememberPublishedItemUrl(item, publicUrl);
-  return { publicUrl };
+    opts.onProgress?.("upload", done + 1, total);
+    const result = await putPublishObject({
+      token: session.token,
+      target,
+      relPath: "index.html",
+      bytes: new TextEncoder().encode(html),
+      syllabusMeta: {
+        title,
+        itemType: itemTypeLabel,
+        annotations: opts.includeAnnotations ? "y" : "n",
+        ...(isDevelopmentEnv() ? { dev: "y" } : {}),
+      },
+    });
+    publicUrl = result.publicUrl || publicUrl;
+    if (!publicUrl.endsWith("/")) {
+      publicUrl = `${publicUrl}/`;
+    }
+    // Committed — do not roll back if remembering the URL fails.
+    sessionUploads.length = 0;
+    setItemPage = false;
+
+    await rememberPublishedItemUrl(item, publicUrl);
+    return { publicUrl };
+  } catch (err) {
+    ztoolkit.log("Item publish failed; rolling back new session uploads", err);
+    await rollbackPublishSession({
+      token: session.token,
+      uploads: sessionUploads,
+      clearItemPage:
+        setItemPage && !hadItemPage ? { libraryId, itemKey } : null,
+    });
+    throw err;
+  }
 }
 
 export async function unpublishItemFromCloud(opts: {
