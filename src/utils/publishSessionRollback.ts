@@ -79,11 +79,7 @@ export async function rollbackPublishSession(opts: {
         removeSyllabus: ref.collectionKey,
       });
     } catch (err) {
-      ztoolkit.log(
-        "publish rollback: removeSyllabus failed",
-        ref.itemKey,
-        err,
-      );
+      ztoolkit.log("publish rollback: removeSyllabus failed", ref.itemKey, err);
     }
   }
 

@@ -324,10 +324,13 @@ export async function listPublishedSyllabi(
   const itemPrefixStats = new Map<string, { bytes: number; files: number }>();
   for (const row of byId.values()) {
     if (row.kind !== "item") continue;
-    itemPrefixStats.set(shareId("item", row.userId, row.libraryId, row.itemKey), {
-      bytes: row.bytes,
-      files: row.files,
-    });
+    itemPrefixStats.set(
+      shareId("item", row.userId, row.libraryId, row.itemKey),
+      {
+        bytes: row.bytes,
+        files: row.files,
+      },
+    );
   }
 
   const shares: PublishedShare[] = [];
@@ -392,9 +395,7 @@ export async function listPublishedSyllabi(
 
   for (const s of shares) {
     if (s.kind === "item") {
-      protectedItemIds.add(
-        shareId("item", s.userId, s.libraryId, s.itemKey),
-      );
+      protectedItemIds.add(shareId("item", s.userId, s.libraryId, s.itemKey));
     }
   }
 
@@ -590,7 +591,9 @@ export async function listPublishedSyllabi(
       };
     }),
   );
-  users.sort((a, b) => b.usageBytes - a.usageBytes || a.userId.localeCompare(b.userId));
+  users.sort(
+    (a, b) => b.usageBytes - a.usageBytes || a.userId.localeCompare(b.userId),
+  );
   const totalBytes = users.reduce((n, u) => n + u.usageBytes, 0);
 
   let views: ViewStats;
@@ -1974,7 +1977,10 @@ export async function handleAdminSetQuota(
   const quotaBytes = Number(body.quotaBytes);
   if (!Number.isFinite(quotaBytes) || quotaBytes <= 0) {
     return adminJson(
-      { error: "invalid_quota", message: "quotaBytes must be a positive number" },
+      {
+        error: "invalid_quota",
+        message: "quotaBytes must be a positive number",
+      },
       400,
     );
   }
@@ -1989,7 +1995,10 @@ export async function handleAdminSetQuota(
     });
   } catch {
     return adminJson(
-      { error: "invalid_quota", message: "quotaBytes must be a positive number" },
+      {
+        error: "invalid_quota",
+        message: "quotaBytes must be a positive number",
+      },
       400,
     );
   }

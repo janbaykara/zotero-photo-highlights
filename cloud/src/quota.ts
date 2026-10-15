@@ -60,10 +60,7 @@ export async function setQuotaBytes(
   return n;
 }
 
-export async function clearQuotaBytes(
-  env: Env,
-  userId: string,
-): Promise<void> {
+export async function clearQuotaBytes(env: Env, userId: string): Promise<void> {
   await env.KV.delete(`quota:${userId}`);
 }
 
