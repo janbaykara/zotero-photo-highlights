@@ -35,7 +35,9 @@ declare const Components: {
       open: (callback: (result: number) => void) => void;
       files: {
         hasMoreElements: () => boolean;
-        getNext: () => { QueryInterface: (iface: unknown) => { path?: string } };
+        getNext: () => {
+          QueryInterface: (iface: unknown) => { path?: string };
+        };
       };
     };
     nsIFile: { path?: string };
