@@ -1,0 +1,24 @@
+{
+  "name": "@janbaykara/zotero-dnd",
+  "version": "0.1.0",
+  "description": "Chrome-safe drag-and-drop for Zotero plugins, built on @dnd-kit/abstract",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    ".": "./src/index.ts",
+    "./preact": "./src/preact/index.ts"
+  },
+  "peerDependencies": {
+    "@dnd-kit/abstract": "^0.5.0",
+    "@dnd-kit/collision": "^0.5.0",
+    "@dnd-kit/geometry": "^0.5.0",
+    "@dnd-kit/helpers": "^0.5.0",
+    "@dnd-kit/state": "^0.5.0",
+    "preact": "^10.0.0"
+  },
+  "peerDependenciesMeta": {
+    "preact": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@janbaykara/zotero-jotai-state",
+  "version": "0.1.0",
+  "description": "Jotai atoms and subscribe helpers for Zotero Notifier and Prefs",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "jotai": "^3.0.0",
+    "jotai-family": "^1.0.0"
+  }
+}

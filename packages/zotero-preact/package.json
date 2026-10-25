@@ -1,0 +1,14 @@
+{
+  "name": "@janbaykara/zotero-preact",
+  "version": "0.1.0",
+  "description": "Mount Preact into Zotero chrome: roots, tabs, and dialogs",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "preact": "^10.0.0",
+    "zotero-plugin-toolkit": "^5.0.0"
+  }
+}

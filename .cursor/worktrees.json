@@ -1,0 +1,3 @@
+{
+  "setup-worktree": ["pnpm install", "node scripts/copy-worktree-env.mjs"]
+}

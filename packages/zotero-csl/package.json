@@ -1,0 +1,10 @@
+{
+  "name": "@janbaykara/zotero-csl",
+  "version": "0.1.0",
+  "description": "CSL style listing and bibliography generation for Zotero plugins",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

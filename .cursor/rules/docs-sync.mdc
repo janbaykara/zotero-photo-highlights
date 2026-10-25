@@ -1,0 +1,10 @@
+---
+description: Keep the README in sync with setup and behaviour changes
+alwaysApply: true
+---
+
+# Documentation sync
+
+When you change install steps, the plugin identity fields, behaviour a user would notice, or how photos, OCR, and highlight positions are stored, update [`README.md`](README.md) and [`doc/TECHNICAL.md`](doc/TECHNICAL.md) in the same change.
+
+Skip pure refactors, typo or lint-only edits, and internal test or CI churn.
