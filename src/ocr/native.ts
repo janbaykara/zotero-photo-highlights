@@ -1,4 +1,4 @@
-import { config } from "../../package.json";
+import { config, version } from "../../package.json";
 import {
   parseNativePayload,
   wordsFromNativePayload,
@@ -31,7 +31,13 @@ export async function recognizeNative(image: {
     return { outcome: "fallback", reason: "unknown-language" };
   }
   const os = hostOS();
-  const command = helperCommand(os, image.path, spec);
+  let command: { command: string; args: string[]; space: NativeSpace } | null;
+  try {
+    command = await helperCommand(os, image.path, spec);
+  } catch (error) {
+    ztoolkit.log("Native OCR helper unavailable", { error });
+    return { outcome: "fallback", reason: "failed" };
+  }
   if (!command) {
     return { outcome: "fallback", reason: "platform" };
   }
@@ -48,11 +54,11 @@ export async function recognizeNative(image: {
   return runHelper(command.command, command.args, command.space, image);
 }
 
-function helperCommand(
+async function helperCommand(
   os: string,
   imagePath: string,
   spec: { tags: string[]; prefix: string },
-): { command: string; args: string[]; space: NativeSpace } | null {
+): Promise<{ command: string; args: string[]; space: NativeSpace } | null> {
   const payload = JSON.stringify(spec);
   if (os === "Darwin") {
     return {
@@ -60,7 +66,7 @@ function helperCommand(
       args: [
         "-l",
         "JavaScript",
-        addonFile("vision-ocr.js"),
+        await addonFile("vision-ocr.js"),
         imagePath,
         payload,
       ],
@@ -77,7 +83,7 @@ function helperCommand(
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        addonFile("windows-ocr.ps1"),
+        await addonFile("windows-ocr.ps1"),
         "-Image",
         imagePath,
         "-Spec",
@@ -197,7 +203,25 @@ function exitCodeOf(waited: { exitCode?: number } | number): number {
   return typeof waited.exitCode === "number" ? waited.exitCode : 1;
 }
 
-function addonFile(name: string): string {
+const helperFiles = new Map<string, Promise<string>>();
+
+function addonFile(name: string): Promise<string> {
+  let pending = helperFiles.get(name);
+  if (!pending) {
+    pending = materializeAddonFile(name);
+    helperFiles.set(name, pending);
+    pending.catch(() => {
+      if (helperFiles.get(name) === pending) {
+        helperFiles.delete(name);
+      }
+    });
+  }
+  return pending;
+}
+
+// A packed add-on maps chrome:// URLs into the XPI. osascript and PowerShell
+// can only open a real file, so copy the helper out when it is not one.
+async function materializeAddonFile(name: string): Promise<string> {
   const uri = Services.io.newURI(
     `chrome://${config.addonRef}/content/ocr/${name}`,
   );
@@ -209,13 +233,108 @@ function addonFile(name: string): string {
     (Components.interfaces as { nsIChromeRegistry?: unknown })
       .nsIChromeRegistry,
   );
-  return registry.convertChromeURL(uri).QueryInterface(Ci.nsIFileURL).file.path;
+  const resolved = registry.convertChromeURL(uri);
+  const direct = filePath(resolved);
+  if (direct) {
+    return direct;
+  }
+  const dir = PathUtils.join(
+    Zotero.getTempDirectory().path,
+    "photo-highlights-ocr",
+    version,
+  );
+  await IOUtils.makeDirectory(dir, {
+    ignoreExisting: true,
+    createAncestors: true,
+  });
+  const dest = PathUtils.join(dir, name);
+  if (!(await IOUtils.exists(dest))) {
+    const bytes = await readURIBytes(resolved);
+    if (!bytes.length) {
+      throw new Error(`OCR helper ${name} was empty`);
+    }
+    await IOUtils.write(dest, bytes, { tmpPath: `${dest}.partial` });
+  }
+  return dest;
 }
 
-type ChromeRegistry = {
-  convertChromeURL: (uri: unknown) => {
-    QueryInterface: (iface: unknown) => { file: { path: string } };
+function filePath(uri: ChromeURL): string | null {
+  try {
+    return uri.QueryInterface(Ci.nsIFileURL).file.path;
+  } catch {
+    return null;
+  }
+}
+
+async function readURIBytes(uri: ChromeURL): Promise<Uint8Array> {
+  const { NetUtil } = ChromeUtils.importESModule(
+    "resource://gre/modules/NetUtil.sys.mjs",
+  ) as {
+    NetUtil: {
+      newChannel: (options: {
+        uri: ChromeURL;
+        loadUsingSystemPrincipal: boolean;
+      }) => unknown;
+      asyncFetch: (
+        channel: unknown,
+        callback: (stream: BinaryStream, status: number) => void,
+      ) => void;
+    };
   };
+  const channel = NetUtil.newChannel({
+    uri,
+    loadUsingSystemPrincipal: true,
+  });
+  const stream = await new Promise<BinaryStream>((resolve, reject) => {
+    NetUtil.asyncFetch(channel, (input, status) => {
+      if ((status & 0x80000000) !== 0) {
+        reject(new Error(`Could not read OCR helper (${status})`));
+        return;
+      }
+      resolve(input);
+    });
+  });
+  const reader = (
+    Components.classes as unknown as Record<
+      string,
+      { createInstance: (iface: unknown) => ScriptableStream }
+    >
+  )["@mozilla.org/scriptableinputstream;1"].createInstance(
+    Ci.nsIScriptableInputStream,
+  );
+  reader.init(stream);
+  const chunks: string[] = [];
+  while (reader.available()) {
+    const part = reader.read(Math.min(reader.available(), 1 << 16));
+    if (!part) {
+      break;
+    }
+    chunks.push(part);
+  }
+  reader.close();
+  const binary = chunks.join("");
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) {
+    bytes[index] = binary.charCodeAt(index) & 0xff;
+  }
+  return bytes;
+}
+
+type BinaryStream = object;
+
+type ScriptableStream = {
+  init: (stream: BinaryStream) => void;
+  available: () => number;
+  read: (count: number) => string;
+  close: () => void;
+};
+
+type ChromeURL = {
+  QueryInterface: (iface: unknown) => { file: { path: string } };
+};
+
+type ChromeRegistry = {
+  convertChromeURL: (uri: unknown) => ChromeURL;
 };
 
 function hostOS(): string {

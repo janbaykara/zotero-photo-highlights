@@ -79,6 +79,35 @@ async function readLanguageBytes(
   return new Uint8Array(await response.arrayBuffer());
 }
 
+const scriptBlobs = new Map<string, Promise<string>>();
+
+function engineBlob(win: Window, name: string): Promise<string> {
+  let pending = scriptBlobs.get(name);
+  if (!pending) {
+    pending = fetchEngineBlob(win, name);
+    scriptBlobs.set(name, pending);
+    pending.catch(() => {
+      if (scriptBlobs.get(name) === pending) {
+        scriptBlobs.delete(name);
+      }
+    });
+  }
+  return pending;
+}
+
+// A DOM Worker cannot importScripts a chrome URL inside a packed XPI.
+// Hand it blob URLs of the script bytes instead.
+async function fetchEngineBlob(win: Window, name: string): Promise<string> {
+  const response = await win.fetch(ocrChrome(name));
+  if (!response.ok) {
+    throw new Error(`${name} missing (${response.status})`);
+  }
+  const blob = new win.Blob([await response.arrayBuffer()], {
+    type: "text/javascript",
+  });
+  return win.URL.createObjectURL(blob);
+}
+
 function loadTesseract(win: Window): TesseractApi {
   const host = win as Window & { Tesseract?: TesseractApi };
   if (host.Tesseract?.createWorker) {
@@ -109,21 +138,44 @@ export async function recognizeImage(
   ztoolkit.log("OCR engine", { engine: "tesseract", reason: native.reason });
   const langPath = await ensureOcrLanguage(lang, win);
   const errors: unknown[] = [];
-  for (const workerBlobURL of [false, true]) {
+  const attempts: Array<{
+    workerPath: string;
+    corePath: string;
+    workerBlobURL: boolean;
+  }> = [];
+  try {
+    attempts.push({
+      workerPath: await engineBlob(win, "worker.min.js"),
+      corePath: await engineBlob(win, "tesseract-core.wasm.js"),
+      workerBlobURL: false,
+    });
+  } catch (error) {
+    errors.push(error);
+    ztoolkit.log("OCR scripts unavailable", error);
+  }
+  const chromeWorker = ocrChrome("worker.min.js");
+  const chromeCore = ocrChrome("tesseract-core.wasm.js");
+  attempts.push(
+    {
+      workerPath: chromeWorker,
+      corePath: chromeCore,
+      workerBlobURL: false,
+    },
+    {
+      workerPath: chromeWorker,
+      corePath: chromeCore,
+      workerBlobURL: true,
+    },
+  );
+  for (const attempt of attempts) {
     try {
       return {
-        words: await recognizeOnce(
-          image.url,
-          lang,
-          langPath,
-          win,
-          workerBlobURL,
-        ),
+        words: await recognizeOnce(image.url, lang, langPath, win, attempt),
         engine: "tesseract",
       };
     } catch (error) {
       errors.push(error);
-      ztoolkit.log("OCR attempt failed", { workerBlobURL, error });
+      ztoolkit.log("OCR attempt failed", { ...attempt, error });
     }
   }
   throw errors[errors.length - 1] || new Error("OCR failed");
@@ -134,14 +186,14 @@ async function recognizeOnce(
   lang: string,
   langPath: string,
   win: Window,
-  workerBlobURL: boolean,
+  scripts: { workerPath: string; corePath: string; workerBlobURL: boolean },
 ): Promise<OcrWord[]> {
   const api = loadTesseract(win);
   const worker = await api.createWorker(lang, 1, {
-    workerPath: ocrChrome("worker.min.js"),
-    corePath: ocrChrome("tesseract-core.wasm.js"),
+    workerPath: scripts.workerPath,
+    corePath: scripts.corePath,
     langPath,
-    workerBlobURL,
+    workerBlobURL: scripts.workerBlobURL,
     cacheMethod: "none",
     gzip: false,
   });

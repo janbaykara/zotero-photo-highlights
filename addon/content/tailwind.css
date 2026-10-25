@@ -94,9 +94,6 @@
   .pointer-events-none {
     pointer-events: none;
   }
-  .collapse {
-    visibility: collapse;
-  }
   .visible {
     visibility: visible;
   }
@@ -483,9 +480,6 @@
       var(--default-transition-timing-function)
     );
     transition-duration: var(--tw-duration, var(--default-transition-duration));
-  }
-  :where(:is(.print)) .in-\[\.print\]\:hidden {
-    display: none;
   }
 }
 .flex {
