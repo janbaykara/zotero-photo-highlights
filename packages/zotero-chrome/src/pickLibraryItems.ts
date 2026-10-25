@@ -20,6 +20,8 @@ export type PickLibraryItemsOptions = {
   isEnabled?: () => boolean;
   /** Passed through to the dialog `io.itemTreeID`. */
   itemTreeID?: string;
+  /** When true, the dialog returns at most one item. Default false. */
+  singleSelection?: boolean;
   log?: (message: string, error?: unknown) => void;
 };
 
@@ -43,8 +45,8 @@ export async function pickLibraryItems(
   }
 
   const io: SelectItemsDialogIO = {
-    singleSelection: false,
-    multiSelect: true,
+    singleSelection: options?.singleSelection === true,
+    multiSelect: options?.singleSelection !== true,
     dataIn: null,
     dataOut: null,
     deferred: Zotero.Promise.defer(),

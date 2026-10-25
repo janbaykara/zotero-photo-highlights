@@ -17,7 +17,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const XPI_NAME = "zotero-plugin.xpi";
+const XPI_NAME = "zotero-photo-highlights.xpi";
 const PUBLISH_COMMIT_RE = /^chore\(publish\):\s*release\b/i;
 
 function parseArgs(argv) {

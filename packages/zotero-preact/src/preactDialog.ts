@@ -68,16 +68,32 @@ function injectDialogStyles(doc: Document): void {
 }
 
 function mountPreact(root: HTMLElement, jsx: ComponentChildren): void {
+  useDialogDocument(root);
   render(jsx, root);
 }
 
 function unmountPreact(root: HTMLElement | null): void {
   if (!root) return;
   try {
+    useDialogDocument(root);
     render(null, root);
   } catch (error) {
-    getPreactDeps().log("Error unmounting Preact dialog:", error);
+    const thrown = error as { message?: string; stack?: string };
+    getPreactDeps().log(
+      "Error unmounting Preact dialog:",
+      thrown?.message || String(error),
+      thrown?.stack || "",
+    );
   }
+}
+
+/**
+ * Preact creates nodes with the realm's `document`. Plugin sandboxes do not
+ * have one, and a dialog is a different document from the main window.
+ */
+function useDialogDocument(root: HTMLElement): void {
+  const scope = globalThis as typeof globalThis & { document?: Document };
+  scope.document = root.ownerDocument;
 }
 
 /**
@@ -118,7 +134,12 @@ export function openPreactDialog(
     try {
       mountPreact(root, options.content(handle));
     } catch (error) {
-      deps.log("Error remounting Preact dialog:", error);
+      const thrown = error as { message?: string; stack?: string };
+      deps.log(
+        "Error remounting Preact dialog:",
+        thrown?.message || String(error),
+        thrown?.stack || "",
+      );
     }
   };
 
@@ -136,6 +157,7 @@ export function openPreactDialog(
     id: rootId,
     styles: {
       width: "100%",
+      height: "100%",
       boxSizing: "border-box",
       overflow: "auto",
     },

@@ -2,6 +2,7 @@ import { getString, initLocale } from "./utils/locale";
 import { getCSSUrl } from "./utils/css";
 import { configureWorkspacePackages } from "./utils/configurePackages";
 import { createZToolkit } from "./utils/ztoolkit";
+import { registerPhotoMenus } from "./modules/photoMenus";
 
 async function onStartup(rootURI: string) {
   await Promise.all([
@@ -82,6 +83,12 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
     await win.document.l10n?.addResourceIds?.([mainWindowFtl]);
   } catch (error) {
     ztoolkit.log("Error loading mainWindow fluent:", error);
+  }
+
+  try {
+    registerPhotoMenus();
+  } catch (error) {
+    ztoolkit.log("Error registering menus:", error);
   }
 }
 

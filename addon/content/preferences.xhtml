@@ -6,4 +6,37 @@
   onload="Zotero.__addonInstance__.hooks.onPrefsEvent('load', { window })"
 >
   <html:h1 class="plugin-pref-heading" data-l10n-id="prefs-title"></html:h1>
+  <checkbox
+    id="zotero-prefpane-__addonRef__-retainUnmatchedPhotos"
+    preference="retainUnmatchedPhotos"
+    data-l10n-id="pref-retain-unmatched-photos"
+  />
+  <html:p data-l10n-id="pref-retain-unmatched-photos-desc"></html:p>
+  <html:label data-l10n-id="pref-ocr-lang"></html:label>
+  <menulist
+    id="zotero-prefpane-__addonRef__-photoAnnotationOcrLang"
+    preference="photoAnnotationOcrLang"
+  >
+    <menupopup>
+      <menuitem value="eng" data-l10n-id="ocr-lang-eng" />
+      <menuitem value="deu" data-l10n-id="ocr-lang-deu" />
+      <menuitem value="fra" data-l10n-id="ocr-lang-fra" />
+      <menuitem value="spa" data-l10n-id="ocr-lang-spa" />
+      <menuitem value="ita" data-l10n-id="ocr-lang-ita" />
+      <menuitem value="por" data-l10n-id="ocr-lang-por" />
+      <menuitem value="nld" data-l10n-id="ocr-lang-nld" />
+      <menuitem value="pol" data-l10n-id="ocr-lang-pol" />
+      <menuitem value="rus" data-l10n-id="ocr-lang-rus" />
+      <menuitem value="ukr" data-l10n-id="ocr-lang-ukr" />
+      <menuitem value="tur" data-l10n-id="ocr-lang-tur" />
+      <menuitem value="ara" data-l10n-id="ocr-lang-ara" />
+      <menuitem value="heb" data-l10n-id="ocr-lang-heb" />
+      <menuitem value="chi_sim" data-l10n-id="ocr-lang-chi-sim" />
+      <menuitem value="chi_tra" data-l10n-id="ocr-lang-chi-tra" />
+      <menuitem value="jpn" data-l10n-id="ocr-lang-jpn" />
+      <menuitem value="kor" data-l10n-id="ocr-lang-kor" />
+      <menuitem value="vie" data-l10n-id="ocr-lang-vie" />
+    </menupopup>
+  </menulist>
+  <html:p data-l10n-id="pref-ocr-lang-desc"></html:p>
 </vbox>

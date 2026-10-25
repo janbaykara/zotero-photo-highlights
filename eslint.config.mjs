@@ -3,7 +3,7 @@
 import zotero from "@zotero-plugin/eslint-config";
 
 export default [
-  { ignores: ["website/**"] },
+  { ignores: ["website/**", "addon/content/ocr/**"] },
   ...zotero({
     overrides: [
       {

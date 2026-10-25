@@ -1,6 +1,6 @@
 # Agent notes
 
-This repository is a blank Zotero plugin shell plus the shared packages in `packages/`. It has no product views. Rename `package.json` `config` before shipping a plugin. See [README.md](README.md).
+This repository is Zotero Photo Highlights: a wizard that turns photos of physical pages into highlights on a book’s PDF or EPUB. Architecture is in [doc/TECHNICAL.md](doc/TECHNICAL.md). User steps are in [README.md](README.md). The shared libraries under `packages/` are reusable in other plugins.
 
 ## Localization (required)
 

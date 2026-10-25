@@ -25,7 +25,20 @@ declare const Components: {
     };
   };
   interfaces: {
-    nsIFilePicker: any;
+    nsIFilePicker: {
+      modeOpenMultiple: number;
+      filterImages: number;
+      returnOK: number;
+      returnReplace: number;
+      init: (parent: unknown, title: string, mode: number) => void;
+      appendFilters: (filter: number) => void;
+      open: (callback: (result: number) => void) => void;
+      files: {
+        hasMoreElements: () => boolean;
+        getNext: () => { QueryInterface: (iface: unknown) => { path?: string } };
+      };
+    };
+    nsIFile: { path?: string };
     nsIZipReader: any;
     nsIScriptableInputStream: any;
     nsIBinaryInputStream: any;
@@ -86,6 +99,7 @@ declare const IOUtils: {
     options?: { createAncestors?: boolean; ignoreExisting?: boolean },
   ) => Promise<void>;
   read: (path: string, options?: { maxBytes?: number }) => Promise<Uint8Array>;
+  copy: (source: string, dest: string) => Promise<void>;
   write: (
     path: string,
     data: Uint8Array,

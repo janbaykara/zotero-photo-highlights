@@ -1,1 +1,2 @@
-// No product preferences yet. Add `pref("key", default)` lines here.
+pref("retainUnmatchedPhotos", false);
+pref("photoAnnotationOcrLang", "eng");

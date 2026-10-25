@@ -57,6 +57,11 @@ export default defineConfig({
         entryPoints: ["src/index.ts"],
         define: {
           __env__: `"${process.env.NODE_ENV}"`,
+          // exifr reads the free identifier `global` at module eval. The
+          // loadSubScript sandbox has no `global`, and a script-level `var`
+          // is not visible inside the bundle function, so the plugin throws
+          // before menus are registered.
+          global: "globalThis",
         },
         bundle: true,
         // Keep firefox115 so the bundle still runs on Zotero 7; Zotero 8–10
@@ -158,6 +163,10 @@ export default defineConfig({
 var AbortController = globalThis.AbortController;
 var AbortSignal = globalThis.AbortSignal;
 var queueMicrotask = globalThis.queueMicrotask;
+// exifr reads the free identifiers self/global at module eval. The loadSubScript
+// sandbox has neither, so the plugin throws before menus are registered.
+var self = globalThis;
+var global = globalThis;
 `.replace(/\n/g, " "),
         },
       },

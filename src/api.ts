@@ -1,7 +1,12 @@
-/**
- * Public JS API for other Zotero plugins (`Zotero.Plugin.api`).
- * Add methods here when this plugin should expose them.
- */
-const api = {};
+import { openPhotoToAnnotationDialog } from "./modules/openPhotoToAnnotationDialog";
+import { selectedBookId } from "./utils/itemPicker";
+
+const api = {
+  openPhotoToAnnotation(prefillBookId?: number | null) {
+    openPhotoToAnnotationDialog(
+      prefillBookId === undefined ? selectedBookId() : prefillBookId,
+    );
+  },
+};
 
 export default api;

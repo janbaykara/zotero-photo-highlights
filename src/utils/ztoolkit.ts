@@ -1,10 +1,17 @@
 import { ZoteroToolkit } from "zotero-plugin-toolkit/ztoolkit";
 import { config } from "../../package.json";
+import { MenuManager } from "./menuManager";
 
 export { createZToolkit };
 
 function createZToolkit() {
-  const toolkit = new ZoteroToolkit();
+  const toolkit = new ZoteroToolkit() as ZoteroToolkit & { Menu: MenuManager };
+  toolkit.Menu = new MenuManager(toolkit);
+  const baseUnregisterAll = toolkit.unregisterAll.bind(toolkit);
+  toolkit.unregisterAll = () => {
+    toolkit.Menu.unregisterAll();
+    baseUnregisterAll();
+  };
   initZToolkit(toolkit);
   return toolkit;
 }

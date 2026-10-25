@@ -3,3 +3,88 @@
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "@janbaykara/zotero-tailwind-theme/theme.css";
 @source "./**/*.{ts,tsx,js,jsx}";
+
+/*
+ * zotero.css defines `.flex { flex: 1 1 0% }` without a layer. Tailwind
+ * utilities are layered, so they cannot override it, and every flex box
+ * grows to an equal share of the dialog. These unlayered rules restore the
+ * Tailwind meaning. Keep them after the utilities so `.flex-1` still wins
+ * when both classes are present.
+ */
+.flex {
+  flex: 0 1 auto;
+}
+.flex-1 {
+  flex: 1 1 0%;
+}
+.flex-auto {
+  flex: 1 1 auto;
+}
+.flex-none {
+  flex: none;
+}
+.grow {
+  flex-grow: 1;
+}
+.grow-0 {
+  flex-grow: 0;
+}
+.shrink {
+  flex-shrink: 1;
+}
+.shrink-0 {
+  flex-shrink: 0;
+}
+
+/*
+ * html.css pads every ul by 40px and sizes it as content-box. A width of
+ * 100% then extends past the drop well. The dialog is a XUL document, so a
+ * bare `ul` selector does not match the HTML list. `*|ul` does.
+ */
+#photo-highlights-root *|ul {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+#photo-highlights-root *|li {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+/* html.css gives every paragraph a 1em margin, and flex gaps do not collapse it. */
+#photo-highlights-root *|p {
+  margin: 0;
+}
+
+#photo-highlights-root *|img {
+  -moz-user-select: none;
+  user-select: none;
+  -moz-user-drag: none;
+  user-drag: none;
+}
+
+/*
+ * The dialog's root font is 13px, so text-sm is only 11px. Lift the wizard
+ * type a few pixels. Unlayered so it beats the Tailwind utilities.
+ */
+#photo-highlights-root .text-xs {
+  font-size: 12px;
+  line-height: 1.4;
+}
+#photo-highlights-root .text-sm {
+  font-size: 14px;
+  line-height: 1.45;
+}
+#photo-highlights-root .text-lg {
+  font-size: 17px;
+  line-height: 1.35;
+}
+#photo-highlights-root *|button,
+#photo-highlights-root *|select,
+#photo-highlights-root *|textarea,
+#photo-highlights-root *|input {
+  font-size: inherit;
+}

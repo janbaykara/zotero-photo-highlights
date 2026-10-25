@@ -7,7 +7,8 @@
 declare namespace _ZoteroTypes {
   interface Prefs {
     PluginPrefsMap: {
-      
+      "retainUnmatchedPhotos": boolean;
+      "photoAnnotationOcrLang": string;
     };
   }
 }
