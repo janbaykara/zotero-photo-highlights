@@ -6,11 +6,13 @@ import {
   normalizePassage,
   quotesOverlap,
   scoreWithContext,
+  wordsAround,
 } from "../src/match/passage";
 import {
   lineRectsForRange,
   pageTextFromItems,
   pdfSortIndex,
+  verticalBand,
   yFromTop,
   type PdfTextItem,
 } from "../src/match/pdfRects";
@@ -92,6 +94,19 @@ describe("photo matching", function () {
       );
       assert.equal(plain.kind, "ambiguous");
     });
+
+    it("keeps the words on either side of a hit", function () {
+      const page = "Alpha beta the modern method is simple gamma delta";
+      const start = page.indexOf("the modern");
+      const end = start + "the modern method is simple".length;
+      const around = wordsAround(page, start, end);
+      assert.equal(around.lead, "Alpha beta");
+      assert.equal(around.trail, "gamma delta");
+      const cut = wordsAround(page, start, end, 1);
+      assert.equal(cut.lead, "… beta");
+      assert.equal(cut.trail, "gamma …");
+    });
+
     it("treats a contained quote as a duplicate", function () {
       assert.isTrue(
         quotesOverlap(
@@ -127,6 +142,12 @@ describe("photo matching", function () {
         pdfSortIndex(3, start, yFromTop(800, rects)),
         "00003|000004|00690",
       );
+    });
+
+    it("splits a page into top, middle, and bottom", function () {
+      assert.equal(verticalBand(300, 20), "top");
+      assert.equal(verticalBand(300, 150), "middle");
+      assert.equal(verticalBand(300, 250), "bottom");
     });
   });
 

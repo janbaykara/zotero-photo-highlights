@@ -4,9 +4,13 @@ export type OcrWord = {
   y0: number;
   x1: number;
   y1: number;
+  /** Reading-order line from the recognizer, or from clustering Tesseract words. */
+  line: number;
 };
 
 export type OcrState = "pending" | "running" | "done" | "error";
+
+export type OcrEngine = "vision" | "windows" | "tesseract";
 
 export type PhotoDraft = {
   id: string;
@@ -22,6 +26,8 @@ export type PhotoDraft = {
   orientToken: number;
   scaledPath: string;
   ocr: OcrState;
+  /** Set when recognition finishes. Cleared while a new pass is running. */
+  ocrEngine: OcrEngine | null;
   words: OcrWord[];
   imageUrl: string;
   imageWidth: number;

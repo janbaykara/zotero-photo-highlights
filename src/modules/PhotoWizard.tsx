@@ -27,7 +27,12 @@ import {
 import { deleteFile, importPhoto, saveHighlight } from "../photo/save";
 import { bakeExifOrientation, writeQuarterTurns } from "../photo/orient";
 import { formatPhotoWhen, readPhotoTakenAt } from "../photo/takenAt";
-import { OCR_LANGUAGES, type OcrWord, type PhotoDraft } from "../photo/types";
+import {
+  OCR_LANGUAGES,
+  type OcrEngine,
+  type OcrWord,
+  type PhotoDraft,
+} from "../photo/types";
 
 type Step = "add" | "link" | "mark" | "review" | "matching" | "summary";
 
@@ -142,6 +147,7 @@ export function PhotoWizard(props: {
         orientToken: 0,
         scaledPath,
         ocr: "pending",
+        ocrEngine: null,
         words: [],
         imageUrl: scaled.url,
         imageWidth: scaled.width,
@@ -178,7 +184,7 @@ export function PhotoWizard(props: {
     setPhotos((current) =>
       current.map((photo) =>
         photo.id === draft.id && photo.orientToken === token
-          ? { ...photo, ocr: "running" }
+          ? { ...photo, ocr: "running", ocrEngine: null }
           : photo,
       ),
     );
@@ -187,18 +193,34 @@ export function PhotoWizard(props: {
       setPhotos((current) =>
         current.map((photo) =>
           photo.id === draft.id && photo.orientToken === token
-            ? { ...photo, ocr: "error" }
+            ? { ...photo, ocr: "error", ocrEngine: null }
             : photo,
         ),
       );
       return;
     }
     try {
-      const words = await recognizeImage(draft.imageUrl, language, win);
+      const recognized = await recognizeImage(
+        {
+          url: draft.imageUrl,
+          path: draft.scaledPath,
+          width: draft.imageWidth,
+          height: draft.imageHeight,
+        },
+        language,
+        win,
+      );
       setPhotos((current) =>
         current.map((photo) =>
           photo.id === draft.id && photo.orientToken === token
-            ? { ...photo, ocr: "done", words, quote: "", selected: [] }
+            ? {
+                ...photo,
+                ocr: "done",
+                ocrEngine: recognized.engine,
+                words: recognized.words,
+                quote: "",
+                selected: [],
+              }
             : photo,
         ),
       );
@@ -207,7 +229,7 @@ export function PhotoWizard(props: {
       setPhotos((current) =>
         current.map((photo) =>
           photo.id === draft.id && photo.orientToken === token
-            ? { ...photo, ocr: "error" }
+            ? { ...photo, ocr: "error", ocrEngine: null }
             : photo,
         ),
       );
@@ -230,6 +252,7 @@ export function PhotoWizard(props: {
       turns,
       orientToken: token,
       ocr: "running",
+      ocrEngine: null,
       words: [],
       selected: [],
       quote: "",
@@ -280,7 +303,7 @@ export function PhotoWizard(props: {
     }
     const win = Zotero.getMainWindow();
     if (!win) {
-      updatePhoto(photo.id, { ocr: "error" });
+      updatePhoto(photo.id, { ocr: "error", ocrEngine: null });
       return;
     }
     const quarters = ((turns % 4) + 4) % 4;
@@ -318,6 +341,7 @@ export function PhotoWizard(props: {
             selected: [],
             quote: "",
             ocr: "running",
+            ocrEngine: null,
           };
         }),
       );
@@ -329,7 +353,14 @@ export function PhotoWizard(props: {
         win.URL.revokeObjectURL(previousUrl);
       }
       void runOcr(
-        { ...photo, imageUrl: scaled.url, orientToken: token, turnedPath },
+        {
+          ...photo,
+          imageUrl: scaled.url,
+          imageWidth: scaled.width,
+          imageHeight: scaled.height,
+          orientToken: token,
+          turnedPath,
+        },
         lang,
         token,
       );
@@ -338,7 +369,7 @@ export function PhotoWizard(props: {
       setPhotos((current) =>
         current.map((item) =>
           item.id === photo.id && item.orientToken === token
-            ? { ...item, ocr: "error" }
+            ? { ...item, ocr: "error", ocrEngine: null }
             : item,
         ),
       );
@@ -606,7 +637,7 @@ export function PhotoWizard(props: {
               const next = (event.currentTarget as HTMLSelectElement).value;
               setLang(next);
               for (const photo of photosRef.current) {
-                void runOcr(photo, next);
+                void runOcr(photo, next, photo.orientToken);
               }
             }}
           >
@@ -953,7 +984,7 @@ function AddStep(props: {
                       : undefined
                   }
                 >
-                  {ocrLabel(photo.ocr)}
+                  {ocrLabel(photo.ocr, photo.ocrEngine)}
                 </div>
               </div>
               <div class="flex shrink-0 gap-1">
@@ -1000,11 +1031,20 @@ function photoLabel(photo: PhotoDraft): string {
   return formatPhotoWhen(photo.takenAt);
 }
 
-function ocrLabel(state: PhotoDraft["ocr"]): string {
+function ocrLabel(state: PhotoDraft["ocr"], engine: OcrEngine | null): string {
   if (state === "running" || state === "pending")
     return getString("wizard-mark-ocr");
   if (state === "error") return getString("wizard-mark-ocr-failed");
-  return getString("wizard-ocr-done");
+  if (!engine) return getString("wizard-ocr-done");
+  return getString("wizard-ocr-done-engine", {
+    args: { engine: getString(ocrEngineKey(engine)) },
+  });
+}
+
+function ocrEngineKey(engine: OcrEngine): FluentMessageId {
+  if (engine === "vision") return "wizard-ocr-engine-vision";
+  if (engine === "windows") return "wizard-ocr-engine-windows";
+  return "wizard-ocr-engine-tesseract";
 }
 
 function LinkStep(props: {
@@ -1295,6 +1335,12 @@ function selectionContext(photo: PhotoDraft): {
 }
 
 function readingOrder(words: OcrWord[]): number[] {
+  if (words.length && words.every((word) => Number.isFinite(word.line))) {
+    return words
+      .map((word, index) => ({ word, index }))
+      .sort((a, b) => a.word.line - b.word.line || a.index - b.index)
+      .map((entry) => entry.index);
+  }
   const items = words.map((word, index) => ({ word, index }));
   items.sort((a, b) => a.word.y0 - b.word.y0 || a.word.x0 - b.word.x0);
   const lines: { word: OcrWord; index: number }[][] = [];
@@ -1533,17 +1579,29 @@ function ReviewStep(props: {
           style="width:8rem;height:8rem"
         />
         <div class="flex min-w-0 flex-1 flex-col gap-2">
-          <div class="flex flex-wrap items-baseline justify-between gap-2">
-            <p class="text-lg font-semibold">
-              {getString("wizard-mark-count", {
-                args: { index: props.index + 1, count: props.count },
-              })}
-            </p>
-            <p class="text-sm text-secondary">
-              {photo.takenAt != null
-                ? formatPhotoWhen(photo.takenAt)
-                : photo.name}
-            </p>
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex min-w-0 flex-col gap-1">
+              <p class="text-lg font-semibold">
+                {getString("wizard-mark-count", {
+                  args: { index: props.index + 1, count: props.count },
+                })}
+              </p>
+              <p class="text-sm text-secondary">
+                {photo.takenAt != null
+                  ? formatPhotoWhen(photo.takenAt)
+                  : photo.name}
+              </p>
+            </div>
+            {decision.kind === "ambiguous" ? (
+              <button
+                type="button"
+                disabled={choice == null}
+                style={saveButtonStyle(choice == null)}
+                onClick={saveChoice}
+              >
+                {getString("wizard-review-save")}
+              </button>
+            ) : null}
           </div>
           <div class="flex flex-col gap-1 rounded-md border border-border bg-background-toolbar px-3 py-3">
             <p class="text-lg font-semibold">{getString(copy.title)}</p>
@@ -1578,14 +1636,7 @@ function ReviewStep(props: {
                   style={placeCardStyle(selected)}
                   onClick={() => setChoice({ kind: "place", index })}
                 >
-                  <span class="text-xs font-semibold">
-                    {getString("wizard-review-page", {
-                      args: { label: place.label },
-                    })}
-                  </span>
-                  <span class="text-sm" style={placePreviewStyle}>
-                    {place.preview}
-                  </span>
+                  <PlaceCardBody place={place} />
                 </button>
               );
             })}
@@ -1602,42 +1653,6 @@ function ReviewStep(props: {
           </button>
         </div>
       ) : null}
-      {editingQuote ? (
-        <label class="flex flex-col gap-1 text-xs text-secondary">
-          {getString("wizard-review-edit")}
-          <textarea
-            ref={quoteRef}
-            class="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
-            rows={3}
-            value={photo.quote}
-            onInput={(event) =>
-              props.onQuote((event.currentTarget as HTMLTextAreaElement).value)
-            }
-          />
-        </label>
-      ) : (
-        <div>
-          <button
-            type="button"
-            onClick={() => {
-              quoteFocus.current = true;
-              setEditingQuote(true);
-            }}
-          >
-            {getString("wizard-review-edit")}
-          </button>
-        </div>
-      )}
-      <div class="flex flex-wrap gap-2">
-        {editingQuote ? (
-          <button type="button" onClick={props.onSearch}>
-            {getString("wizard-review-search-again")}
-          </button>
-        ) : null}
-        <button type="button" onClick={props.onRedo}>
-          {getString("wizard-review-redo")}
-        </button>
-      </div>
       {addingComment ? (
         <label class="flex flex-col gap-1 text-xs text-secondary">
           {getString("wizard-review-add-comment")}
@@ -1669,13 +1684,6 @@ function ReviewStep(props: {
       {decision.kind === "ambiguous" && choice?.kind === "none" ? (
         <KeepPhotoToggle checked={props.keepPhotos} onChange={props.onKeep} />
       ) : null}
-      {decision.kind === "ambiguous" ? (
-        <div>
-          <button type="button" disabled={choice == null} onClick={saveChoice}>
-            {getString("wizard-review-save")}
-          </button>
-        </div>
-      ) : null}
       {decision.kind === "duplicate" ? (
         <div class="flex flex-wrap gap-2">
           <button type="button" onClick={() => props.onDecide("skip")}>
@@ -1699,12 +1707,108 @@ function ReviewStep(props: {
           </div>
         </div>
       ) : null}
+      <div class="flex flex-col gap-2 rounded-md border border-border px-3 py-3">
+        <p class="text-sm font-semibold">{getString("wizard-review-revise")}</p>
+        <p class="text-xs text-secondary">
+          {getString("wizard-review-revise-help")}
+        </p>
+        {editingQuote ? (
+          <label class="flex flex-col gap-1 text-xs text-secondary">
+            {getString("wizard-review-edit")}
+            <textarea
+              ref={quoteRef}
+              class="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
+              rows={3}
+              value={photo.quote}
+              onInput={(event) =>
+                props.onQuote(
+                  (event.currentTarget as HTMLTextAreaElement).value,
+                )
+              }
+            />
+          </label>
+        ) : null}
+        <div class="flex flex-wrap gap-2">
+          {editingQuote ? null : (
+            <button
+              type="button"
+              onClick={() => {
+                quoteFocus.current = true;
+                setEditingQuote(true);
+              }}
+            >
+              {getString("wizard-review-edit")}
+            </button>
+          )}
+          {editingQuote ? (
+            <button type="button" onClick={props.onSearch}>
+              {getString("wizard-review-search-again")}
+            </button>
+          ) : null}
+          <button type="button" onClick={props.onRedo}>
+            {getString("wizard-review-redo")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
-const placePreviewStyle =
-  "display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;";
+function saveButtonStyle(disabled: boolean): string {
+  return [
+    "appearance:none",
+    "-moz-appearance:none",
+    "flex:0 0 auto",
+    "margin:0",
+    "padding:0.45rem 1rem",
+    "border:none",
+    "border-radius:6px",
+    "background:var(--accent-blue, #2ea8e5)",
+    "color:#fff",
+    "font-weight:600",
+    disabled ? "opacity:0.4" : "cursor:pointer",
+  ].join(";");
+}
+
+function PlaceCardBody(props: { place: LocatedPlace }) {
+  const place = props.place;
+  const bandKey =
+    place.band === "top"
+      ? "wizard-review-place-top"
+      : place.band === "bottom"
+        ? "wizard-review-place-bottom"
+        : place.band === "middle"
+          ? "wizard-review-place-middle"
+          : null;
+  return (
+    <>
+      <span class="text-xs font-semibold" style={placeLineStyle}>
+        {getString("wizard-review-page", { args: { label: place.label } })}
+      </span>
+      {bandKey ? (
+        <span class="text-xs text-secondary" style={placeLineStyle}>
+          {getString(bandKey)}
+        </span>
+      ) : null}
+      {place.lead ? (
+        <span class="text-xs text-secondary" style={placeLineStyle}>
+          {place.lead}
+        </span>
+      ) : null}
+      <span class="text-sm" style={placeLineStyle}>
+        {place.excerpt || place.preview}
+      </span>
+      {place.trail ? (
+        <span class="text-xs text-secondary" style={placeLineStyle}>
+          {place.trail}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+const placeLineStyle =
+  "display:block;white-space:normal;flex:0 0 auto;min-width:0;max-width:100%";
 
 function placeCardStyle(selected: boolean): string {
   const border = selected

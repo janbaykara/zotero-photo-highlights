@@ -86,6 +86,30 @@ function isLetter(char: string | undefined): boolean {
   return !!char && /\p{L}/u.test(char);
 }
 
+/** Words immediately before and after [start, end) in `text`. */
+export function wordsAround(
+  text: string,
+  start: number,
+  end: number,
+  words = 12,
+): { lead: string; trail: string } {
+  const source = String(text || "");
+  const from = Math.max(0, Math.min(start, source.length));
+  const to = Math.max(from, Math.min(end, source.length));
+  const before = source.slice(0, from).trim().split(/\s+/).filter(Boolean);
+  const after = source.slice(to).trim().split(/\s+/).filter(Boolean);
+  const leadWords = before.slice(-words);
+  const trailWords = after.slice(0, words);
+  return {
+    lead: leadWords.length
+      ? `${before.length > words ? "… " : ""}${leadWords.join(" ")}`
+      : "",
+    trail: trailWords.length
+      ? `${trailWords.join(" ")}${after.length > words ? " …" : ""}`
+      : "",
+  };
+}
+
 export function quotesOverlap(paragraph: string, quote: string): boolean {
   const left = normalizePassage(paragraph);
   const right = normalizePassage(quote);

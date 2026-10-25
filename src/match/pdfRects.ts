@@ -98,6 +98,23 @@ export function pdfSortIndex(
   return [part(pageIndex, 5), part(textOffset, 6), part(yFromTop, 5)].join("|");
 }
 
+export type PageBand = "top" | "middle" | "bottom";
+
+/** Which third of the page a hit sits in. `fromTop` is the distance from the top. */
+export function verticalBand(pageHeight: number, fromTop: number): PageBand {
+  if (!(pageHeight > 0)) {
+    return "middle";
+  }
+  const ratio = fromTop / pageHeight;
+  if (ratio < 1 / 3) {
+    return "top";
+  }
+  if (ratio > 2 / 3) {
+    return "bottom";
+  }
+  return "middle";
+}
+
 export function yFromTop(pageHeight: number, rects: PdfLineRect[]): number {
   if (!rects.length) {
     return 0;

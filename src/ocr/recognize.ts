@@ -1,5 +1,7 @@
 import { config } from "../../package.json";
-import type { OcrWord } from "../photo/types";
+import { clusterTesseractWords, keepOcrWord } from "./boxes";
+import { recognizeNative } from "./native";
+import type { OcrEngine, OcrWord } from "../photo/types";
 
 type TesseractWord = {
   text?: string;
@@ -90,35 +92,41 @@ function loadTesseract(win: Window): TesseractApi {
 }
 
 export async function recognizeImage(
-  imageUrl: string,
+  image: { url: string; path: string; width: number; height: number },
   lang: string,
   win: Window,
-): Promise<OcrWord[]> {
+): Promise<{ words: OcrWord[]; engine: OcrEngine }> {
+  const native = await recognizeNative({
+    path: image.path,
+    lang,
+    width: image.width,
+    height: image.height,
+  });
+  if (native.outcome === "ready") {
+    ztoolkit.log("OCR engine", native.engine);
+    return { words: native.words, engine: native.engine };
+  }
+  ztoolkit.log("OCR engine", { engine: "tesseract", reason: native.reason });
   const langPath = await ensureOcrLanguage(lang, win);
   const errors: unknown[] = [];
   for (const workerBlobURL of [false, true]) {
     try {
-      return await recognizeOnce(imageUrl, lang, langPath, win, workerBlobURL);
+      return {
+        words: await recognizeOnce(
+          image.url,
+          lang,
+          langPath,
+          win,
+          workerBlobURL,
+        ),
+        engine: "tesseract",
+      };
     } catch (error) {
       errors.push(error);
       ztoolkit.log("OCR attempt failed", { workerBlobURL, error });
     }
   }
   throw errors[errors.length - 1] || new Error("OCR failed");
-}
-
-function keepOcrWord(text: string, confidence?: number): boolean {
-  if (!text) {
-    return false;
-  }
-  if (typeof confidence === "number" && confidence < 45) {
-    return false;
-  }
-  const letters = text.replace(/[^\p{L}\p{N}]/gu, "");
-  if (!letters) {
-    return false;
-  }
-  return letters.length / text.length >= 0.5;
 }
 
 async function recognizeOnce(
@@ -140,7 +148,7 @@ async function recognizeOnce(
   try {
     await worker.setParameters({ tessedit_pageseg_mode: "3" });
     const result = await worker.recognize(imageUrl);
-    return (result.data?.words || [])
+    const words = (result.data?.words || [])
       .map((word) => ({
         text: String(word.text || "").trim(),
         confidence: word.confidence,
@@ -151,6 +159,7 @@ async function recognizeOnce(
       }))
       .filter((word) => keepOcrWord(word.text, word.confidence))
       .map(({ text, x0, y0, x1, y1 }) => ({ text, x0, y0, x1, y1 }));
+    return clusterTesseractWords(words);
   } finally {
     await worker.terminate().catch(() => undefined);
   }

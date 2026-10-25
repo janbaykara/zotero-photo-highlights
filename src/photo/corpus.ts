@@ -7,13 +7,16 @@ import {
   normalizeWithMap,
   quotesOverlap,
   scoreWithContext,
+  wordsAround,
   type PassageHit,
 } from "../match/passage";
 import {
   lineRectsForRange,
   pageTextFromItems,
   pdfSortIndex,
+  verticalBand,
   yFromTop,
+  type PageBand,
   type PdfTextItem,
 } from "../match/pdfRects";
 import {
@@ -28,6 +31,14 @@ export type LocatedPlace = {
   attachmentId: number;
   label: string;
   preview: string;
+  /** Original-cased match, shortened for the location card. */
+  excerpt: string;
+  /** Words in the book immediately before the match. */
+  lead: string;
+  /** Words in the book immediately after the match. */
+  trail: string;
+  /** Empty for an EPUB section, which has no page height. */
+  band: PageBand | "";
   positionJSON: string;
   sortIndex: string;
   pageLabel: string;
@@ -37,6 +48,8 @@ type Slice = {
   attachmentId: number;
   label: string;
   text: string;
+  /** Text before normalization, so a location card can show real casing. */
+  source: string;
   map: number[];
   kind: "pdf" | "epub";
   pageIndex: number;
@@ -131,6 +144,7 @@ async function pdfSlices(
       attachmentId,
       label: labels[page - 1] || String(page),
       text: normalized.text,
+      source: built.text,
       map: normalized.map,
       kind: "pdf",
       pageIndex: page - 1,
@@ -214,6 +228,7 @@ async function epubSlices(
         attachmentId,
         label: label || `§${spineIndex + 1}`,
         text: normalized.text,
+        source: raw,
         map: normalized.map,
         kind: "epub",
         pageIndex: spineIndex,
@@ -476,22 +491,22 @@ async function placeFor(
   const start = slice.map[hit.start] ?? 0;
   const endIndex = Math.max(hit.start, hit.end - 1);
   const end = (slice.map[endIndex] ?? start) + 1;
+  const snippet = placeSnippet(slice, hit, start, end);
   if (slice.kind === "pdf" && slice.pdfItems) {
     const rects = lineRectsForRange(slice.pdfItems, start, end);
     if (!rects.length) {
       return null;
     }
     const position = { pageIndex: slice.pageIndex, rects };
+    const fromTop = yFromTop(slice.pageHeight || 0, rects);
     return {
       attachmentId: slice.attachmentId,
       label: slice.label,
       preview: hit.matched.slice(0, 180),
+      ...snippet,
+      band: verticalBand(slice.pageHeight || 0, fromTop),
       positionJSON: JSON.stringify(position),
-      sortIndex: pdfSortIndex(
-        slice.pageIndex,
-        hit.start,
-        yFromTop(slice.pageHeight || 0, rects),
-      ),
+      sortIndex: pdfSortIndex(slice.pageIndex, hit.start, fromTop),
       pageLabel: slice.label,
     };
   }
@@ -500,9 +515,28 @@ async function placeFor(
     attachmentId: slice.attachmentId,
     label: slice.label,
     preview: quote.slice(0, 180),
+    ...snippet,
+    band: "",
     positionJSON: JSON.stringify(epubFragmentSelector(cfi)),
     sortIndex: epubSortIndex(slice.pageIndex, hit.start),
     pageLabel: slice.label,
+  };
+}
+
+function placeSnippet(
+  slice: Slice,
+  hit: PassageHit,
+  rawStart: number,
+  rawEnd: number,
+): { excerpt: string; lead: string; trail: string } {
+  const source = slice.source || slice.text;
+  const around = wordsAround(source, rawStart, rawEnd);
+  const match = source.slice(rawStart, rawEnd).replace(/\s+/g, " ").trim();
+  const excerpt = match.length > 180 ? `${match.slice(0, 177).trim()}…` : match;
+  return {
+    excerpt: excerpt || hit.matched.slice(0, 180),
+    lead: around.lead,
+    trail: around.trail,
   };
 }
 
