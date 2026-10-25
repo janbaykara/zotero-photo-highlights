@@ -579,6 +579,7 @@ export function PhotoWizard(props: {
           comment: photo.comment,
           color: photo.color,
           place: outcome.place,
+          takenAt: photo.takenAt,
         });
         await discardPhoto(photo);
         return { kind: "saved", item: saved.item };
@@ -737,6 +738,7 @@ export function PhotoWizard(props: {
         comment: photo.comment,
         color: photo.color,
         place: decision.place,
+        takenAt: photo.takenAt,
       });
       setCreated((current) => [...current, saved.item]);
       next.duplicatesCreated += 1;
@@ -748,6 +750,7 @@ export function PhotoWizard(props: {
         comment: photo.comment,
         color: photo.color,
         place,
+        takenAt: photo.takenAt,
       });
       setCreated((current) => [...current, saved.item]);
       next.located += 1;
@@ -762,6 +765,7 @@ export function PhotoWizard(props: {
           comment: photo.comment,
           color: photo.color,
           place: null,
+          takenAt: photo.takenAt,
         });
         setCreated((current) => [...current, saved.item]);
         next.unlocated += 1;

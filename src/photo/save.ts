@@ -10,6 +10,7 @@ export async function saveHighlight(options: {
   comment: string;
   color: string;
   place?: LocatedPlace | null;
+  takenAt?: number | null;
 }): Promise<SavedHighlight> {
   const attachment = await Zotero.Items.getAsync(options.attachmentId);
   if (!attachment) {
@@ -30,6 +31,9 @@ export async function saveHighlight(options: {
     annotation.annotationPageLabel = "";
     annotation.annotationSortIndex = "00000|000000|00000";
     annotation.annotationPosition = "{}";
+  }
+  if (options.takenAt != null && Number.isFinite(options.takenAt)) {
+    annotation.dateAdded = new Date(options.takenAt).toISOString();
   }
   await annotation.saveTx();
   return { item: annotation };
