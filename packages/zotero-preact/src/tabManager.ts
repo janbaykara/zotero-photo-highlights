@@ -6,7 +6,7 @@ import { getPreactDeps } from "./config";
  * Configuration for a tab that can be created dynamically
  */
 export interface TabConfig<TParams = any> {
-  type: string; // Tab type (e.g., "syllabus", "reading-list")
+  type: string; // Tab type (e.g. "library", "reader")
   title: string | ((params?: TParams) => string); // Tab title (static or dynamic)
   rootElementIdFactory: (params?: TParams) => string; // Generate root element ID from params
   data?: any | ((params?: TParams) => any); // Optional tab data (icon, etc.)

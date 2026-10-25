@@ -12,7 +12,7 @@ Utilities for Zotero PDF annotations (no UI):
 
 ## Why it’s valuable
 
-Annotation chrome is fiddly (hex vs named colors, tag filters, batch mutations). Shipping these as pure helpers lets any reader/gallery UI share the same rules without copying Syllabus components.
+Annotation chrome is fiddly (hex vs named colors, tag filters, batch mutations). Shipping these as pure helpers lets any plugin share the same rules.
 
 ## How to use
 

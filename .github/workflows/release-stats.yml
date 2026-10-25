@@ -9,7 +9,7 @@ on:
       repository:
         description: "Repository in format owner/repo"
         required: false
-        default: "janbaykara/zotero-syllabus"
+        default: ""
         type: string
       csv_path:
         description: "Path to CSV file"
@@ -52,7 +52,7 @@ jobs:
       - name: Update release stats
         env:
           GitHub_TOKEN: ${{ secrets.GitHub_TOKEN }}
-          REPOSITORY: ${{ inputs.repository || 'janbaykara/zotero-syllabus' }}
+          REPOSITORY: ${{ inputs.repository || github.repository }}
           CSV_PATH: ${{ inputs.csv_path || 'releases.csv' }}
           ASSET_EXTENSION: ${{ inputs.asset_extension || '.xpi' }}
         run: |

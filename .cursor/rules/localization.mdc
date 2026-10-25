@@ -10,7 +10,7 @@ Do not add hardcoded user-visible English (labels, titles, placeholders, aria-te
 
 ```tsx
 // ❌ BAD
-<button title="Lock syllabus">Lock</button>
+<button title="Lock page">Lock</button>
 
 // ✅ GOOD
 <button title={getString("page-lock")}>{getString("page-lock")}</button>
@@ -18,15 +18,14 @@ Do not add hardcoded user-visible English (labels, titles, placeholders, aria-te
 
 ```ftl
 # addon/locale/en-US/addon.ftl — then the same key in every locale folder
-page-lock = Lock syllabus
+page-lock = Lock page
 ```
 
-- **Keys:** kebab-case in `addon/locale/en-US/addon.ftl` (this is the bundle `getString` loads). Copy the key into **every** `addon/locale/<code>/addon.ftl`. Do **not** start ids with `syllabus-` — the build already prefixes them, and a double prefix looks up nothing.
+- **Keys:** kebab-case in `addon/locale/en-US/addon.ftl` (this is the bundle `getString` loads). Copy the key into **every** `addon/locale/<code>/addon.ftl`. Do **not** start ids with the `addonRef` from `package.json` — the build already prefixes them, and a double prefix looks up nothing.
 - **JS/TSX:** `getString("key")` or `getString("key", { args: { name } })`. Safe in Preact render.
 - **Prefs XHTML:** `data-l10n-id` + `preferences.ftl`.
 - **Variables:** `{ $name }` in FTL, never concatenate sentences in code.
 - **Call `getString` at render/use time**, not at module load (`initLocale` has not run yet).
-- **Do not translate stored identifiers:** note title prefix `"Syllabus"` / `"Syllabus document"` (readable H1 `Syllabus document - {collection name}`), `"Personal Reading Order"` / `"Personal reading order"` (readable H1 `Personal reading order - {collection name}`), collection `"Reading Schedule"`, top-level folder `"Pinned"`, playground `"Syllabus Tour"`, plugin JSON heading, Extra field `Zotero Syllabus URL`, tags `zotero-syllabus` / `zotero-syllabus-personal-reading-order` / `pinned` / `zotero-syllabus-pinned-intention` / `zotero-syllabus-pinned-collection` / `zotero-syllabus-gallery:{collectionKey}`. Display labels for those concepts still go through Fluent.
-- **Product name** `Zotero Syllabus` stays untranslated.
+- **Product name** in `package.json` `config.addonName` stays untranslated.
 - Locale folders match Zotero: `de` not `de-DE`; `ar` not `ar-SA`; `pt-BR`, `es-ES`, `fr-FR`, …
-- Details: `doc/TECHNICAL.md` (Localization) and `AGENTS.md`.
+- Details: `AGENTS.md`.

@@ -68,7 +68,7 @@ async function collectFromGitHub(ref) {
     {
       headers: {
         Accept: "application/vnd.github+json",
-        "User-Agent": "zotero-syllabus-zotero-chrome-generate",
+        "User-Agent": "zotero-plugin-zotero-chrome-generate",
       },
     },
   );
@@ -89,7 +89,7 @@ async function collectFromGitHub(ref) {
     {
       headers: {
         Accept: "application/vnd.github+json",
-        "User-Agent": "zotero-syllabus-zotero-chrome-generate",
+        "User-Agent": "zotero-plugin-zotero-chrome-generate",
       },
     },
   );

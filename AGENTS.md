@@ -1,47 +1,28 @@
 # Agent notes
 
+This repository is a blank Zotero plugin shell plus the shared packages in `packages/`. It has no product views. Rename `package.json` `config` before shipping a plugin. See [README.md](README.md).
+
 ## Localization (required)
 
 Do not add hardcoded user-visible text in TS, TSX, XHTML, or progress windows.
 
-1. Add a kebab-case key to `addon/locale/en-US/addon.ftl` (or `preferences.ftl` / `mainWindow.ftl` for those bundles). Do not start ids with `syllabus-` (the build already prefixes them).
+1. Add a kebab-case key to `addon/locale/en-US/addon.ftl` (or `preferences.ftl` / `mainWindow.ftl` for those bundles). Do not start ids with the `addonRef` value (the build already prefixes them).
 2. Copy the same key into **every** folder under `addon/locale/` (`de`, `pt-BR`, `es-ES`, `fr-FR`, `zh-CN`, …). German is `de`, not `de-DE`. Arabic is `ar`.
 3. Look it up with `getString("the-key")` or `getString("the-key", { args: { name } })` from `src/utils/locale.ts`. Safe in Preact JSX.
 4. Call `getString` at render/use time, never at module scope (`initLocale` runs at startup).
-5. Do not rename stored identifiers: note title prefix `"Syllabus"` / `"Syllabus document"` (readable H1 `Syllabus document - {collection name}`), `"Personal Reading Order"` / `"Personal reading order"` (readable H1 `Personal reading order - {collection name}`), collection `"Reading Schedule"`, top-level folder `"Pinned"`, playground `"Syllabus Tour"`, plugin JSON heading, Extra field `Zotero Syllabus URL`, tags `zotero-syllabus`, `zotero-syllabus-personal-reading-order`, `pinned`, `zotero-syllabus-pinned-intention`, `zotero-syllabus-pinned-collection`, `zotero-syllabus-gallery:{collectionKey}`.
-6. Keep the product name `Zotero Syllabus` untranslated.
+5. Keep the product name in `package.json` `config.addonName` untranslated.
 
-Details: [doc/TECHNICAL.md](doc/TECHNICAL.md#localization) and `.cursor/rules/localization.mdc`.
+## Packages
 
-## Documentation sync (required)
+Cross-root live state can use Jotai’s default store (no `<Provider>` on Preact roots). External mirrors go through `atomFromExternal` / `atomFamilyFromExternal` from `@janbaykara/zotero-jotai-state`.
 
-Any change that affects user-facing behaviour, architecture, storage, prefs, APIs, or install/setup must update **all three** in the same change:
+Reusable chrome libraries live under [`packages/`](packages/README.md) (pnpm workspace; `workspace:*`). Only Preact needs host wiring via `src/utils/configurePackages.ts`.
 
-1. **Website** — [`website/src/content/docs/`](website/src/content/docs/) (Diátaxis how-tos / tutorials / concepts / reference; landing [`index.mdx`](website/src/content/docs/index.mdx) if the feature set changes). Sidebar: [`website/astro.config.mjs`](website/astro.config.mjs).
-2. **README.md** — install overview, surface list, docs-site link, API pointers. Do not re-expand the full manual into the README.
-3. **doc/TECHNICAL.md** — architecture, storage, contributor commands. Link to the website for end-user steps.
-
-Skip only pure refactors, typo/lint-only edits, or internal CI/test churn with no behaviour or contract change. Details: `.cursor/rules/docs-sync.mdc`.
-
-## Docs site (GitHub Pages)
-
-User-facing docs live in [`website/`](website/) (Astro Starlight). From the repo root: `pnpm docs:dev` / `pnpm docs:build`. Deployed by [`.github/workflows/docs.yml`](.github/workflows/docs.yml) to https://janbaykara.github.io/zotero-syllabus/. Do not put end-user docs only in the README — update `website/src/content/docs/` instead. First-time Pages setup: repo Settings → Pages → Source = GitHub Actions.
-
-**API reference:** [`starlight-typedoc`](https://starlight-typedoc.vercel.app/) in [`website/astro.config.mjs`](website/astro.config.mjs) generates docs from [`src/api.ts`](src/api.ts) into `website/src/content/docs/api/` (gitignored). Sidebar: one **Reference → API** entry pointing at the `syllabusApi` page (intro + example from that symbol’s JSDoc; interface pages stay linkable but off-nav). Prefer list-format JSDoc on public methods; use thin `interface extends …` wrappers for Zod-inferred shapes so returns link by name instead of inlining.
+If the plugin uses `@janbaykara/zotero-cache`, call `zoteroCache.initialize()` from startup and `zoteroCache.shutdown()` from shutdown.
 
 ## Lint / package manager
 
-Use **pnpm** only (`pnpm-lock.yaml`). CI runs `pnpm run lint:check` with a fresh install from that lockfile. After pulling dep changes, run `pnpm install` before linting. Prefer `pnpm lint:fix` locally, then confirm with `pnpm lint:check` (what CI runs). Do not introduce `package-lock.json`. The `website/` package has its own lockfile and is ignored by root Prettier/ESLint.
-
-## Shared UI / Zotero state (Jotai)
-
-Cross-root and cross-view live state uses Jotai’s **default store** (no `<Provider>` on Preact roots). External mirrors (selection, prefs, syllabus notes) go through `atomFromExternal` / `atomFamilyFromExternal` from `@janbaykara/zotero-jotai-state` (`atomFamily` from `jotai-family`, not `jotai/utils`). Domain hooks live under `src/modules/react-zotero-sync/`. Plugin-owned UI (e.g. syllabus assignment selection) uses plain atoms — write with `useSetAtom` / `getDefaultStore().set`, never `useState` + a sync effect.
-
-Reusable chrome libraries live under [`packages/`](packages/README.md) (pnpm workspace; `workspace:*`). Only Preact needs host wiring via `src/utils/configurePackages.ts`; other packages use `Zotero` or call-site options.
-
-**Prefer a Jotai atom for Zotero entity state.** When UI depends on a concrete fact about an item, collection, class, pin, etc. (e.g. “is this class done?”), expose it as an `atomFamilyFromExternal` (or plain atom) + hook that returns that value — not `void someGeneration` plus an imperative `getX()` read. Generation counters are fine as the underlying bus that atoms subscribe to; call sites should consume the entity atom. Example: [`useClassReadingDone`](src/modules/react-zotero-sync/personalReadingOrder.ts).
-
-**Optimistic entity writes (flipside of entity atoms).** For user gestures that update Zotero-backed plugin state (checkboxes, DnD reorder, …), patch the in-memory cache and notify listeners **synchronously**, then persist the note in the background. Syllabus document: [`patchCollectionDocumentOptimistic`](src/modules/syllabusNote.ts). Personal Reading Order: [`patchPersonalReadingOrderOptimistic`](src/modules/personalReadingOrder.ts) (used by `setItemReadingDone` / `setAssignmentReadingDone` / `setClassReadingDone`). Do not await a note write before the UI can read the new value from the entity atom. Details: [doc/TECHNICAL.md](doc/TECHNICAL.md#shared-data-layer-jotai).
+Use **pnpm** only (`pnpm-lock.yaml`). CI runs `pnpm run lint:check` with a fresh install from that lockfile. After pulling dependency changes, run `pnpm install` before linting. Prefer `pnpm lint:fix` locally, then confirm with `pnpm lint:check`. Do not introduce `package-lock.json`.
 
 ## Zotero Dev MCP
 

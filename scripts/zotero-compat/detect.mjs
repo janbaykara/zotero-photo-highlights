@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
 const VERSION_API =
   "https://www.zotero.org/download/client/version?channel=release";
-const USER_AGENT = "zotero-syllabus-compat (GitHub Action)";
+const USER_AGENT = "zotero-plugin-compat (GitHub Action)";
 const CHANGELOG_MAX_CHARS = 80_000;
 
 function parseMajor(version) {

@@ -18,15 +18,14 @@ Peers: `jotai`, `jotai-family`. Do **not** wrap Preact roots in `<Provider>` —
 
 ### Pref → atom
 
-`prefKey` is the full Zotero pref path (e.g. `extensions.zotero.syllabus.foo`).
+`prefKey` is the full Zotero pref path (e.g. `extensions.zotero.plugin.foo`).
 
 ```ts
 import { useAtomValue } from "jotai";
 import { atomFromPref } from "@janbaykara/zotero-jotai-state";
 
-const denseCardsAtom = atomFromPref(
-  "extensions.zotero.syllabus.denseCards",
-  () => Boolean(Zotero.Prefs.get("extensions.zotero.syllabus.denseCards")),
+const denseCardsAtom = atomFromPref("extensions.zotero.plugin.denseCards", () =>
+  Boolean(Zotero.Prefs.get("extensions.zotero.plugin.denseCards")),
 );
 
 function DenseToggleLabel() {
@@ -40,12 +39,9 @@ Or subscribe without an atom:
 ```ts
 import { subscribePref } from "@janbaykara/zotero-jotai-state";
 
-const unsubscribe = subscribePref(
-  "extensions.zotero.syllabus.denseCards",
-  () => {
-    /* re-read pref / invalidate UI */
-  },
-);
+const unsubscribe = subscribePref("extensions.zotero.plugin.denseCards", () => {
+  /* re-read pref / invalidate UI */
+});
 // later: unsubscribe();
 ```
 
@@ -116,8 +112,8 @@ function ItemTitle({ itemId }: { itemId: number }) {
 
 ### In this repo
 
-Domain atoms (syllabus notes, PRO, pinned, selection) live under `src/modules/react-zotero-sync/`. Prefer entity-keyed families at call sites over “void a generation counter then call `getX()`”.
+Put domain atoms in the plugin. Prefer entity-keyed families at call sites over reading a value only after bumping a generation counter.
 
 ## Out of scope
 
-Syllabus-specific entity hooks, optimistic note patches, and prefs-prefix helpers (`subscribePluginPref` in the plugin).
+Product entity hooks and the plugin's preference-prefix helpers.

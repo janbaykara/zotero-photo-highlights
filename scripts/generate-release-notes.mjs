@@ -17,7 +17,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const XPI_NAME = "zotero-syllabus.xpi";
+const XPI_NAME = "zotero-plugin.xpi";
 const PUBLISH_COMMIT_RE = /^chore\(publish\):\s*release\b/i;
 
 function parseArgs(argv) {
@@ -123,7 +123,7 @@ async function githubRequest(path, { method = "GET", body } = {}) {
     headers: {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "zotero-syllabus-release-notes",
+      "User-Agent": "zotero-plugin-release-notes",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(body ? { "Content-Type": "application/json" } : {}),
     },

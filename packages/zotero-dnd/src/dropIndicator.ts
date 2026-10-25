@@ -2,7 +2,7 @@
  * Blue-line drop indicators — types, edge math, deferred reorder helpers.
  *
  * Pair with `DropIndicatorPlugin` (paints classes) and consumer CSS for
- * `is-drop-before` / `is-drop-after` (gallery, syllabus, explorer, …).
+ * `is-drop-before` / `is-drop-after`.
  */
 
 import type { UniqueIdentifier } from "@dnd-kit/abstract";
@@ -16,7 +16,7 @@ export type DropIndicatorState = {
   edge: DropEdge;
 } | null;
 
-/** Default class names — match existing syllabus / gallery / explorer CSS. */
+/** Default class names for the drop indicator. */
 export const DROP_INDICATOR_BEFORE_CLASS = "is-drop-before";
 export const DROP_INDICATOR_AFTER_CLASS = "is-drop-after";
 

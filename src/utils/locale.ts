@@ -70,7 +70,7 @@ function compareLocale(a: string, b: string): number {
 
 /**
  * Resolve the plugin instance. Bare `addon` works in the plugin bundle; the
- * scaffold test bundle may not see that binding, so fall back to Zotero.Syllabus.
+ * scaffold test bundle may not see that binding, so fall back to the addon instance.
  */
 function getAddonInstance(): typeof addon | undefined {
   if (typeof addon !== "undefined") {

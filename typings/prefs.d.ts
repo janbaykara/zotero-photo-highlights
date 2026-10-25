@@ -7,57 +7,7 @@
 declare namespace _ZoteroTypes {
   interface Prefs {
     PluginPrefsMap: {
-      "showBibliography": boolean;
-      "defaultItemDensity": string;
-      "readerMode": boolean;
-      "shouldColourSyllabusRows": boolean;
-      "debugMode": boolean;
-      "wpm": number;
-      "enableSyllabus": boolean;
-      "enableGallery": boolean;
-      "enableExplorer": boolean;
-      "enableReadingSchedule": boolean;
-      "enableAnnotations": boolean;
-      "myAnnotationsCopyBlockquote": boolean;
-      "myAnnotationsCopyCiteKey": boolean;
-      "optionalFeaturesPromptDone": boolean;
-      "latestTourVersion": number;
-      "latestGalleryTourVersion": number;
-      "defaultGalleryLayout": string;
-      "defaultSyllabusLayout": string;
-      "defaultGallerySort": string;
-      "defaultGalleryGroupBy": string;
-      "defaultFurtherReadingSort": string;
-      "defaultAnnotationColorFilter": string;
-      "defaultAnnotationTagFilter": string;
-      "myAnnotationsLayout": string;
-      "myAnnotationsSort": string;
-      "myAnnotationsGroupBy": string;
-      "myAnnotationsOrder": string;
-      "myAnnotationsSearchScope": string;
-      "myAnnotationsColorFilter": string;
-      "myAnnotationsTagFilter": string;
-      "annotationsQuoteOrder": string;
-      "galleryShowItemsWithoutAnnotations": boolean;
-      "galleryIncludeAutomaticTags": boolean;
-      "galleryShowNotes": boolean;
-      "syllabusShowClassNotes": boolean;
-      "magazineTypeSize": string;
-      "magazinePacking": string;
-      "generateReadingScheduleCollection": boolean;
-      "generatePinnedCollection": boolean;
-      "applyReadingScheduleLayoutToPinned": boolean;
-      "showReadingSchedulePinned": boolean;
-      "readingScheduleCollectionKey": string;
-      "pinnedCollectionKey": string;
-      "customIcons": boolean;
-      "publishApiBaseUrl": string;
-      "publishJwt": string;
-      "publishUserId": string;
-      "publishJwtExpiresAt": number;
-      "publishItemUrls": string;
-      "publishShareOptions": string;
-      "defaultPriorities": string;
+      
     };
   }
 }

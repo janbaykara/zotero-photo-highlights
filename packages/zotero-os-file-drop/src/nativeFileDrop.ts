@@ -18,7 +18,7 @@ const ZOTERO_DRAG_TYPES = ["zotero/item", "zotero/collection", "zotero/search"];
 export type OsFileDragOptions = {
   /**
    * Extra DataTransfer type prefixes treated as in-app (not OS) drags
-   * (e.g. `application/x-syllabus-`).
+   * (e.g. `application/x-custom-`).
    */
   extraDragTypePrefixes?: string[];
 };
@@ -391,7 +391,7 @@ export function resolveNativeFileDropDestination(): NativeFileDropDestination | 
     const library = Zotero.Libraries.get(libraryID);
     // Missing library objects must not be treated as read-only: that used to
     // show Zotero's "cannot make changes to the currently selected collection"
-    // alert on Gallery/Syllabus drops.
+    // alert when a plugin view handled the drop.
     if (!library) {
       return {
         libraryID,

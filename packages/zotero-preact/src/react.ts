@@ -13,7 +13,7 @@ type RootMeta = {
  * Each root tree is isolated by a unique identifier to prevent conflicts during hot reloading.
  *
  * Re-renders update in place (no blank flash). Pass `treeKey` when the logical
- * view changes (e.g. collection id / gallery vs syllabus) to force a clean remount.
+ * view changes (e.g. collection id or the active view) to force a clean remount.
  */
 export function renderComponent(
   win: _ZoteroTypes.MainWindow,

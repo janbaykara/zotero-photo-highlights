@@ -1,39 +1,36 @@
 {
-  "name": "zotero-syllabus",
+  "name": "zotero-plugin",
   "type": "module",
-  "version": "1.16.1",
-  "description": "Zotero Syllabus Plugin",
+  "version": "0.1.0",
+  "description": "Blank Zotero plugin shell",
   "config": {
-    "addonName": "Zotero Syllabus",
-    "addonID": "syllabus@janbaykara.com",
-    "addonRef": "syllabus",
-    "addonInstance": "Syllabus",
-    "prefsPrefix": "extensions.zotero.syllabus"
+    "addonName": "Zotero Plugin",
+    "addonID": "plugin@janbaykara.com",
+    "addonRef": "plugin",
+    "addonInstance": "Plugin",
+    "prefsPrefix": "extensions.zotero.plugin"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/janbaykara/zotero-syllabus.git"
+    "url": "git+https://github.com/janbaykara/zotero-plugin.git"
   },
   "author": "Jan Baykara <janbaykara@pm.me>",
   "bugs": {
-    "url": "https://github.com/janbaykara/zotero-syllabus/issues"
+    "url": "https://github.com/janbaykara/zotero-plugin/issues"
   },
-  "homepage": "https://janbaykara.github.io/zotero-syllabus/",
+  "homepage": "https://github.com/janbaykara/zotero-plugin",
   "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@10.25.0",
   "scripts": {
     "build:css": "node scripts/build-css.js",
-    "watch:css": "concurrently -n tw,cover -c blue,magenta \"npx @tailwindcss/cli -i ./src/tailwind.css -o ./addon/content/tailwind.css --watch\" \"node scripts/build-css.js --watch-publish-cover\"",
+    "watch:css": "npx @tailwindcss/cli -i ./src/tailwind.css -o ./addon/content/tailwind.css --watch",
     "start": "concurrently \"pnpm watch:css\" \"zotero-plugin serve\"",
     "build": "NODE_ENV=production pnpm build:css && pnpm lint:check && NODE_ENV=production pnpm zotero-plugin build && NODE_ENV=production pnpm tsc --noEmit",
     "lint:check": "prettier --check . && eslint .",
     "lint:fix": "prettier --write . && eslint . --fix",
     "release": "pnpm lint:check && NODE_ENV=production zotero-plugin release",
     "test": "zotero-plugin test --no-watch",
-    "update-deps": "pnpm update --save",
-    "docs:dev": "pnpm --dir website dev",
-    "docs:build": "pnpm --dir website build",
-    "publish:dash": "cd cloud && npx wrangler deploy && cd .."
+    "update-deps": "pnpm update --save"
   },
   "dependencies": {
     "@dnd-kit/abstract": "^0.5.0",
@@ -51,19 +48,10 @@
     "@janbaykara/zotero-preact": "workspace:*",
     "@janbaykara/zotero-tailwind-theme": "workspace:*",
     "concurrently": "^9.2.1",
-    "date-fns": "^4.4.0",
-    "docx": "^9.7.1",
     "jotai": "^3.0.1",
     "jotai-family": "^1.1.0",
     "lru-cache": "^11.5.2",
-    "lucide-preact": "^0.562.0",
-    "markdown-it": "^15.0.2",
-    "pluralize": "^8.0.0",
     "preact": "^10.29.8",
-    "slugify": "^1.6.9",
-    "superjson": "^2.2.6",
-    "tailwind-merge": "^3.7.0",
-    "uuidv7": "^1.2.1",
     "verzod": "^0.5.1",
     "zod": "^3.25.76",
     "zotero-plugin-toolkit": "^5.2.0"
@@ -71,10 +59,8 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/chai": "^5.2.3",
-    "@types/markdown-it": "^14.2.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.10.0",
-    "@types/pluralize": "^0.0.33",
     "@zotero-plugin/eslint-config": "^0.6.10",
     "chai": "^6.2.1",
     "eslint": "^9.39.2",

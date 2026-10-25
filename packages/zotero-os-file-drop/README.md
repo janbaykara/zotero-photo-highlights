@@ -90,8 +90,8 @@ function DropSurface() {
 
 ### In this repo
 
-Syllabus MIME prefixes (`application/x-syllabus-`), `#syllabus-custom-view`, and `.syllabus` skip helpers are wrapped in [`src/utils/nativeFileDrop.ts`](../../src/utils/nativeFileDrop.ts). Pages import that facade so call sites stay short.
+Call `importFromFile` from the plugin. This package does not know about product-specific MIME types.
 
 ## Out of scope
 
-Drop overlay UI (`OsFileDropOverlay`), Fluent copy, syllabus assignment after import.
+Drop overlay UI and Fluent copy.

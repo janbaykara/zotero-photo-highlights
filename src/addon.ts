@@ -24,7 +24,7 @@ class Addon {
   };
   // Lifecycle hooks
   public hooks: typeof hooks;
-  // Public API for other plugins (`Zotero.Syllabus.api`)
+  // Public API for other plugins (`Zotero[addonInstance].api`)
   public api: typeof api;
 
   constructor() {

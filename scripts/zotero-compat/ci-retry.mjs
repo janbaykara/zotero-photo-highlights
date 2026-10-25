@@ -13,7 +13,7 @@ import { execFileSync } from "node:child_process";
 
 import { createRun } from "./cursor-api.mjs";
 
-const USER_AGENT = "zotero-syllabus-compat (GitHub Action)";
+const USER_AGENT = "zotero-plugin-compat (GitHub Action)";
 const RETRY_MARKER = "<!-- compat-ci-retry -->";
 const AGENT_COMMENT_RE =
   /<!--\s*zotero-compat\s+major=\d+\s+agent=(bc-[0-9a-fA-F-]+)\s*-->/;

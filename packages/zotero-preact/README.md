@@ -56,7 +56,7 @@ renderComponent(
   root,
   h(MyPage, { collectionId }),
   "my-custom-view",
-  `collection:${collectionId}:syllabus`,
+  `collection:${collectionId}:main`,
 );
 
 // Later, when tearing down the view:
@@ -110,7 +110,7 @@ openPreactDialog({
 // Await the clicked button id:
 const choice = await openPreactDialogAsync({
   title: "Confirm",
-  content: () => h("p", null, "Delete this class?"),
+  content: () => h("p", null, "Delete this item?"),
   buttons: [
     { id: "cancel", label: "Cancel" },
     { id: "ok", label: "Delete" },
@@ -123,4 +123,4 @@ Prefer component state over `handle.remount()` unless the whole tree must rebuil
 
 ## Out of scope
 
-Syllabus/Gallery pages, Fluent, Tailwind build, item-pane registration logic.
+Product pages, Fluent, the Tailwind build, and item-pane registration.

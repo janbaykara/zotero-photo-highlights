@@ -10,7 +10,7 @@
  *   node update-release-stats.js <repository> <csv_path> <asset_extension>
  *
  * Example:
- *   node update-release-stats.js janbaykara/zotero-syllabus releases.csv .xpi
+ *   node update-release-stats.js owner/repo releases.csv .xpi
  */
 
 import fs from "fs";
@@ -18,7 +18,7 @@ import https from "https";
 import { URL } from "url";
 
 // Get command-line arguments
-const repository = process.argv[2] || "janbaykara/zotero-syllabus";
+const repository = process.argv[2] || "";
 const csvPath = process.argv[3] || "releases.csv";
 const assetExtension = process.argv[4] || ".xpi";
 const githubToken = process.env.GitHub_TOKEN;
@@ -124,7 +124,7 @@ function writeCsv(filePath, rows) {
 /**
  * Fetch releases from GitHub API
  */
-// https://api.github.com/repos/janbaykara/zotero-syllabus/releases
+// https://api.github.com/repos/{owner}/{repo}/releases
 function fetchReleases(owner, repo, token) {
   return new Promise((resolve, reject) => {
     const url = `https://api.github.com/repos/${owner}/${repo}/releases`;

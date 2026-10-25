@@ -69,4 +69,4 @@ Because values are `var(--material-*)` / `var(--accent-*)`, switching Zotero lig
 
 ## Out of scope
 
-`@source` scanning, chrome:// stylesheet injection / hash busting, publish-cover CSS generation, Syllabus component utilities.
+`@source` scanning, chrome:// stylesheet injection, and host component utilities.

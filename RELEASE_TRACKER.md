@@ -13,7 +13,7 @@ This repository includes a GitHub Actions workflow that automatically tracks rel
 
 The workflow accepts the following inputs (with defaults):
 
-- `repository`: Repository in format `owner/repo` (default: `janbaykara/zotero-syllabus`)
+- `repository`: Repository in format `owner/repo` (default: this repository)
 - `csv_path`: Path to CSV file (default: `releases.csv`)
 - `asset_extension`: Asset file extension to filter (default: `.xpi`)
 

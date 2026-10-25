@@ -5,5 +5,4 @@ node_modules
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
-src/utils/publishCoverStyles.generated.ts
-website
+src/utils/cssHash.generated.ts

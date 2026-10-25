@@ -68,7 +68,7 @@ function List() {
 
 ## Out of scope
 
-Syllabus/gallery CSS, personal reading-order persistence, Fluent.
+Host CSS, persistence, and Fluent.
 
 ---
 
@@ -92,7 +92,7 @@ Pick one per surface. They solve the same problem differently.
 ```tsx
 const DROP_INDICATOR = {
   axis: (el) =>
-    el.closest(".syllabus-gallery-grid") ? "horizontal" : "vertical",
+    el.closest(".gallery-grid") ? "horizontal" : "vertical",
   canIndicate: ({ source, target }) => {
     // return false to skip painting (e.g. block rest→rest)
     return true;

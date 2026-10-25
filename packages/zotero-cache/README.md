@@ -62,18 +62,15 @@ const styleUrl = getCachedPref<string>(
 
 // JSON pref with Zod:
 const LayoutSchema = z.object({ columns: z.number() });
-const layout = getCachedPref(
-  "extensions.zotero.syllabus.galleryLayout",
-  LayoutSchema,
-);
+const layout = getCachedPref("extensions.zotero.plugin.layout", LayoutSchema);
 
 // Versioned JSON (verzod VersionedEntity) — pass as third arg when you use verzod entities.
 ```
 
 ### In this repo
 
-Initialized from plugin startup alongside other chrome setup. Hot paths (item cards, gallery, explorer) prefer `getCachedItem` / `getCachedCollection*` over raw `Zotero.Items.get`.
+Call `zoteroCache.initialize()` from plugin startup and `zoteroCache.shutdown()` on shutdown. Hot paths can use `getCachedItem` / `getCachedCollection*` instead of `Zotero.Items.get`.
 
 ## Out of scope
 
-Plugin prefs prefix / `PluginPrefsMap`, syllabus note document caches.
+The plugin preference prefix and `PluginPrefsMap`.

@@ -1,22 +1,7 @@
-import { SyllabusManager } from "./modules/syllabus";
-import { initLocale } from "./utils/locale";
-import { registerPrefsScripts } from "./modules/preferenceScript";
-import { createZToolkit } from "./utils/ztoolkit";
+import { getString, initLocale } from "./utils/locale";
 import { getCSSUrl } from "./utils/css";
-import {
-  collectionForReadingListImport,
-  selectZoteroCollection,
-} from "./utils/zotero";
-import {
-  ExportSyllabusMetadataSchema,
-  SettingsSyllabusMetadata,
-} from "./utils/schemas";
-import { zoteroCache } from "@janbaykara/zotero-cache";
-import { FEATURE_FLAG } from "./modules/featureFlags";
-import { stashReadingListFile } from "./modules/readingListFileStash";
-import { registerUserGuideHelpMenu, showUserGuide } from "./modules/userGuide";
-import { migrateCompactModeToItemDensity } from "./modules/react-zotero-sync/itemDensity";
 import { configureWorkspacePackages } from "./utils/configurePackages";
+import { createZToolkit } from "./utils/ztoolkit";
 
 async function onStartup(rootURI: string) {
   await Promise.all([
@@ -26,23 +11,9 @@ async function onStartup(rootURI: string) {
   ]);
 
   initLocale();
-
   configureWorkspacePackages();
+  registerPrefs(rootURI);
 
-  // Initialize cache system
-  zoteroCache.initialize();
-
-  migrateCompactModeToItemDensity();
-
-  // Install reading-list translators (Talis, Leganto, KeyLinks, eReserve, BLUEcloud)
-  SyllabusManager.onStartup(rootURI);
-
-  // Register HTTP endpoint for translators to set reading-list syllabus metadata
-  registerTalisMetadataEndpoint();
-
-  // Signal ready before window chrome. The test runner waits only 10s for
-  // this flag; a hung ProgressWindow in headless CI would otherwise stall
-  // the job until GitHub kills it.
   addon.data.initialized = true;
 
   await Promise.all(
@@ -54,271 +25,57 @@ async function onStartup(rootURI: string) {
   );
 }
 
-/**
- * Register HTTP endpoint for translators to set reading-list syllabus metadata
- * Endpoint: /syllabus/setTalisMetadata (alias: /syllabus/setReadingListMetadata)
- * Method: POST
- * Body: { metadata: ExportSyllabusMetadata }
- */
-function registerTalisMetadataEndpoint() {
-  // Only enable reading-list import when feature flag is enabled
-  if (!FEATURE_FLAG.TALIS_METADATA) {
-    ztoolkit.log(
-      "Reading-list HTTP endpoints skipped - feature flag disabled",
-      {
-        version: Zotero.version,
-      },
-    );
-    return;
-  }
-
-  // Check if Zotero.Server.Endpoints exists (available in Zotero 7+)
-  if (
-    typeof Zotero.Server === "undefined" ||
-    typeof Zotero.Server.Endpoints === "undefined"
-  ) {
-    ztoolkit.log(
-      "Zotero.Server.Endpoints not available, skipping endpoint registration",
-    );
-    return;
-  }
-
-  // Register Hello World test endpoint
-  const HelloWorld = function () {};
-  HelloWorld.prototype = {
-    supportedMethods: ["GET"],
-    supportedDataTypes: ["application/json"],
-    permitBookmarklet: true,
-    allowRequestsFromUnsafeWebContent: true,
-
-    init: async function (req: any) {
-      ztoolkit.log("Hello World endpoint called!");
-      return [
-        200,
-        "application/json",
-        JSON.stringify({ message: "Hello World from Zotero Syllabus!" }),
-      ];
-    },
-  };
-
-  (Zotero.Server.Endpoints as any)["/syllabus/hello"] = HelloWorld;
-  ztoolkit.log("Registered /syllabus/hello endpoint");
-
-  const SetTalisMetadata = function () {};
-  SetTalisMetadata.prototype = {
-    supportedMethods: ["POST"],
-    supportedDataTypes: [
-      "application/x-www-form-urlencoded",
-      "application/json",
-    ],
-    permitBookmarklet: true,
-    allowRequestsFromUnsafeWebContent: true,
-
-    init: async function (req: any) {
-      ztoolkit.log("syllabus/setTalisMetadata endpoint called", req);
-      try {
-        // Get metadata from request body
-        if (!req.data) {
-          ztoolkit.log("No data in request body");
-          return [
-            400,
-            "application/json",
-            JSON.stringify({ error: "data required in request body" }),
-          ];
-        }
-
-        const { metadata } = req.data;
-
-        if (!metadata) {
-          ztoolkit.log("No metadata in request body");
-          return [
-            400,
-            "application/json",
-            JSON.stringify({ error: "metadata required in request body" }),
-          ];
-        }
-
-        const validatedMetadataFileContents =
-          ExportSyllabusMetadataSchema.safeParse(metadata);
-        if (!validatedMetadataFileContents.success) {
-          ztoolkit.log(
-            "Invalid metadata JSON",
-            validatedMetadataFileContents,
-            validatedMetadataFileContents,
-          );
-          return [
-            400,
-            "application/json",
-            JSON.stringify({
-              error: "Invalid metadata JSON",
-              details: validatedMetadataFileContents,
-            }),
-          ];
-        }
-
-        ztoolkit.log("Validated metadata:", validatedMetadataFileContents.data);
-
-        const listTitle =
-          validatedMetadataFileContents.data.collectionTitle?.trim() ||
-          "Imported reading list";
-        const destination = await collectionForReadingListImport({
-          title: listTitle,
-          links: validatedMetadataFileContents.data.links,
-        });
-        selectZoteroCollection(destination.id);
-
-        ztoolkit.log(
-          "Setting reading-list syllabus metadata for top-level collection",
-          {
-            libraryID: destination.libraryID,
-            destinationId: destination.id,
-            name: destination.name,
-          },
-        );
-
-        try {
-          const { collectionAndLibraryKey, syllabusData } =
-            await SyllabusManager.importSyllabusMetadata(
-              destination.id,
-              JSON.stringify(validatedMetadataFileContents.data),
-              "background",
-            );
-
-          return [
-            200,
-            "application/json",
-            JSON.stringify({
-              collectionAndLibraryKey: collectionAndLibraryKey as string,
-              syllabusData: syllabusData as SettingsSyllabusMetadata,
-            }),
-          ];
-        } catch (error) {
-          ztoolkit.log("Error setting Talis syllabus metadata:", error);
-          return [
-            500,
-            "application/json",
-            JSON.stringify({
-              error: error instanceof Error ? error.message : String(error),
-            }),
-          ];
-        }
-      } catch (error) {
-        ztoolkit.log("Error setting Talis syllabus metadata:", error);
-        return [
-          500,
-          "application/json",
-          JSON.stringify({
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        ];
-      }
-    },
-  };
-
-  // Register the endpoint
-  (Zotero.Server.Endpoints as any)["/syllabus/setTalisMetadata"] =
-    SetTalisMetadata;
-  (Zotero.Server.Endpoints as any)["/syllabus/setReadingListMetadata"] =
-    SetTalisMetadata;
-  ztoolkit.log(
-    "Registered /syllabus/setTalisMetadata and /syllabus/setReadingListMetadata endpoints",
-  );
-
-  const StashReadingListFile = function () {};
-  StashReadingListFile.prototype = {
-    supportedMethods: ["POST"],
-    supportedDataTypes: [
-      "application/x-www-form-urlencoded",
-      "application/json",
-    ],
-    permitBookmarklet: true,
-    allowRequestsFromUnsafeWebContent: true,
-
-    init: async function (req: any) {
-      const payload = req?.data;
-      if (!payload || typeof payload !== "object") {
-        return [
-          400,
-          "application/json",
-          JSON.stringify({ error: "JSON body required" }),
-        ];
-      }
-      const result = stashReadingListFile({
-        citationId: payload.citationId,
-        title: payload.title,
-        contentType: payload.contentType,
-        filename: payload.filename,
-        data: payload.data,
-      });
-      return [
-        result.ok ? 200 : 400,
-        "application/json",
-        JSON.stringify(result),
-      ];
-    },
-  };
-  (Zotero.Server.Endpoints as any)["/syllabus/stashReadingListFile"] =
-    StashReadingListFile;
-  ztoolkit.log("Registered /syllabus/stashReadingListFile endpoint");
+function registerPrefs(rootURI: string) {
+  Zotero.PreferencePanes.register({
+    pluginID: addon.data.config.addonID,
+    src: `${rootURI}content/preferences.xhtml`,
+    label: getString("app-name"),
+    image: `chrome://${addon.data.config.addonRef}/content/icons/favicon.png`,
+    stylesheets: [`${rootURI}content/preferences.css`],
+  });
 }
 
 function registerStyleSheet(win: _ZoteroTypes.MainWindow) {
   const doc = win.document;
-
-  // Remove any existing stylesheets from previous loads (for hot reload)
-  const existingStylesheets = doc.querySelectorAll(
-    'link[data-syllabus-stylesheet="true"]',
-  );
-  existingStylesheets.forEach((link) => {
+  const existing = doc.querySelectorAll('link[data-plugin-stylesheet="true"]');
+  existing.forEach((link) => {
     link.remove();
   });
 
-  // Load Tailwind CSS with cache-busting hash
-  const tailwindStyles = ztoolkit.UI.createElement(doc, "link", {
+  const tailwind = ztoolkit.UI.createElement(doc, "link", {
     properties: {
       type: "text/css",
       rel: "stylesheet",
       href: getCSSUrl(),
     },
     attributes: {
-      "data-syllabus-stylesheet": "true",
+      "data-plugin-stylesheet": "true",
     },
   });
-  doc.documentElement?.appendChild(tailwindStyles);
+  doc.documentElement?.appendChild(tailwind);
 
-  // Load existing stylesheet (cache-bust so chrome:// updates after rebuild)
-  const styles = ztoolkit.UI.createElement(doc, "link", {
+  const pane = ztoolkit.UI.createElement(doc, "link", {
     properties: {
       type: "text/css",
       rel: "stylesheet",
       href: `chrome://${addon.data.config.addonRef}/content/zoteroPane.css?t=${Date.now()}`,
     },
     attributes: {
-      "data-syllabus-stylesheet": "true",
+      "data-plugin-stylesheet": "true",
     },
   });
-  doc.documentElement?.appendChild(styles);
+  doc.documentElement?.appendChild(pane);
 }
 
 async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
-  // Create ztoolkit for every window
   addon.data.ztoolkit = createZToolkit();
 
-  // Stylesheets must never abort chrome setup.
   try {
     registerStyleSheet(win);
   } catch (error) {
-    try {
-      ztoolkit.log("Error registering syllabus stylesheets:", error);
-    } catch {
-      Zotero.debug?.(
-        `Error registering syllabus stylesheets: ${String(error)}`,
-      );
-    }
+    ztoolkit.log("Error registering stylesheets:", error);
   }
 
-  // Fluent must be in the document before any DOM that uses data-l10n-id.
-  // Never let a missing/failed FTL abort toolbar / syllabus chrome.
   try {
     const mainWindowFtl = `${addon.data.config.addonRef}-mainWindow.ftl`;
     win.MozXULElement.insertFTLIfNeeded(mainWindowFtl);
@@ -326,47 +83,23 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   } catch (error) {
     ztoolkit.log("Error loading mainWindow fluent:", error);
   }
-
-  try {
-    SyllabusManager.onMainWindowLoad(win);
-  } catch (error) {
-    ztoolkit.log("Error in SyllabusManager.onMainWindowLoad:", error);
-  }
-
-  try {
-    registerUserGuideHelpMenu();
-  } catch (error) {
-    ztoolkit.log("Error registering user guide help menu:", error);
-  }
-
-  // First-run / outdated tour — wait for toolbar chrome to exist
-  Zotero.Promise.delay(800).then(() => {
-    void showUserGuide(win).catch((error) => {
-      ztoolkit.log("Error showing user guide:", error);
-    });
-  });
 }
 
-async function onMainWindowUnload(win: _ZoteroTypes.MainWindow): Promise<void> {
+async function onMainWindowUnload(
+  _win: _ZoteroTypes.MainWindow,
+): Promise<void> {
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();
-  SyllabusManager.onMainWindowUnload(win);
 }
 
 function onShutdown(): void {
-  SyllabusManager.onShutdown();
-  zoteroCache.shutdown();
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();
-  // Remove addon object
   addon.data.alive = false;
   // @ts-expect-error - Plugin instance is not typed
   delete Zotero[addon.data.config.addonInstance];
 }
 
-/**
- * Dispatcher for Notify events.
- */
 async function onNotify(
   event: string,
   type: string,
@@ -374,19 +107,18 @@ async function onNotify(
   extraData: { [key: string]: any },
 ) {
   ztoolkit.log("onNotify", event, type, ids, extraData);
-  SyllabusManager.onNotify(event, type, ids, extraData);
 }
 
-/**
- * Dispatcher for Preference UI events.
- * @param type event type
- * @param data event data
- */
 async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   switch (type) {
-    case "load":
-      registerPrefsScripts(data.window);
+    case "load": {
+      addon.data.prefs = {
+        window: data.window,
+        columns: [],
+        rows: [],
+      };
       break;
+    }
     default:
       return;
   }
@@ -399,5 +131,4 @@ export default {
   onMainWindowUnload,
   onNotify,
   onPrefsEvent,
-  onShowUserGuide: showUserGuide,
 };

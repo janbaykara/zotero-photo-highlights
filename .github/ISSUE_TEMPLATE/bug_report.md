@@ -19,7 +19,7 @@ Steps to reproduce the behavior. E.g.:
 
 **Versions**
 
-- Plugin version (from the menu: tools > plugins > Zotero Syllabus > "version")
+- Plugin version (from Tools → Add-ons)
 - Zotero version (from the menu: Zotero > About Zotero)
 - OS: [e.g. mac]
 
