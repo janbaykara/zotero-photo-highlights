@@ -1,7 +1,7 @@
 {
   "name": "zotero-photo-highlights",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turn photos of physical pages into Zotero highlights",
   "config": {
     "addonName": "Zotero Photo Highlights",
