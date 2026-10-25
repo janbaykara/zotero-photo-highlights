@@ -79,33 +79,15 @@ async function readLanguageBytes(
   return new Uint8Array(await response.arrayBuffer());
 }
 
-const scriptBlobs = new Map<string, Promise<string>>();
+type WorkerCtor = { new (url: string): Worker };
 
-function engineBlob(win: Window, name: string): Promise<string> {
-  let pending = scriptBlobs.get(name);
-  if (!pending) {
-    pending = fetchEngineBlob(win, name);
-    scriptBlobs.set(name, pending);
-    pending.catch(() => {
-      if (scriptBlobs.get(name) === pending) {
-        scriptBlobs.delete(name);
-      }
-    });
+function chromeWorkerCtor(win: Window): WorkerCtor | null {
+  const host = win as Window & { ChromeWorker?: WorkerCtor };
+  if (host.ChromeWorker) {
+    return host.ChromeWorker;
   }
-  return pending;
-}
-
-// A DOM Worker cannot importScripts a chrome URL inside a packed XPI.
-// Hand it blob URLs of the script bytes instead.
-async function fetchEngineBlob(win: Window, name: string): Promise<string> {
-  const response = await win.fetch(ocrChrome(name));
-  if (!response.ok) {
-    throw new Error(`${name} missing (${response.status})`);
-  }
-  const blob = new win.Blob([await response.arrayBuffer()], {
-    type: "text/javascript",
-  });
-  return win.URL.createObjectURL(blob);
+  const globalCtor = (globalThis as { ChromeWorker?: WorkerCtor }).ChromeWorker;
+  return globalCtor ?? null;
 }
 
 function loadTesseract(win: Window): TesseractApi {
@@ -137,48 +119,10 @@ export async function recognizeImage(
   }
   ztoolkit.log("OCR engine", { engine: "tesseract", reason: native.reason });
   const langPath = await ensureOcrLanguage(lang, win);
-  const errors: unknown[] = [];
-  const attempts: Array<{
-    workerPath: string;
-    corePath: string;
-    workerBlobURL: boolean;
-  }> = [];
-  try {
-    attempts.push({
-      workerPath: await engineBlob(win, "worker.min.js"),
-      corePath: await engineBlob(win, "tesseract-core.wasm.js"),
-      workerBlobURL: false,
-    });
-  } catch (error) {
-    errors.push(error);
-    ztoolkit.log("OCR scripts unavailable", error);
-  }
-  const chromeWorker = ocrChrome("worker.min.js");
-  const chromeCore = ocrChrome("tesseract-core.wasm.js");
-  attempts.push(
-    {
-      workerPath: chromeWorker,
-      corePath: chromeCore,
-      workerBlobURL: false,
-    },
-    {
-      workerPath: chromeWorker,
-      corePath: chromeCore,
-      workerBlobURL: true,
-    },
-  );
-  for (const attempt of attempts) {
-    try {
-      return {
-        words: await recognizeOnce(image.url, lang, langPath, win, attempt),
-        engine: "tesseract",
-      };
-    } catch (error) {
-      errors.push(error);
-      ztoolkit.log("OCR attempt failed", { ...attempt, error });
-    }
-  }
-  throw errors[errors.length - 1] || new Error("OCR failed");
+  return {
+    words: await recognizeOnce(image.url, lang, langPath, win),
+    engine: "tesseract",
+  };
 }
 
 async function recognizeOnce(
@@ -186,17 +130,31 @@ async function recognizeOnce(
   lang: string,
   langPath: string,
   win: Window,
-  scripts: { workerPath: string; corePath: string; workerBlobURL: boolean },
 ): Promise<OcrWord[]> {
   const api = loadTesseract(win);
-  const worker = await api.createWorker(lang, 1, {
-    workerPath: scripts.workerPath,
-    corePath: scripts.corePath,
-    langPath,
-    workerBlobURL: scripts.workerBlobURL,
-    cacheMethod: "none",
-    gzip: false,
-  });
+  // A blob URL does not end in ".js", so Tesseract treats it as a directory
+  // and importScripts() asks for a core file that was never created. A
+  // ChromeWorker can load the real chrome scripts from a packed add-on.
+  const host = win as Window & { Worker: WorkerCtor };
+  const chromeWorker = chromeWorkerCtor(win);
+  const previous = host.Worker;
+  if (chromeWorker) {
+    host.Worker = chromeWorker;
+  }
+  let created: Promise<TesseractWorker>;
+  try {
+    created = api.createWorker(lang, 1, {
+      workerPath: ocrChrome("worker.min.js"),
+      corePath: ocrChrome("tesseract-core.wasm.js"),
+      langPath,
+      workerBlobURL: false,
+      cacheMethod: "none",
+      gzip: false,
+    });
+  } finally {
+    host.Worker = previous;
+  }
+  const worker = await created;
   try {
     await worker.setParameters({ tessedit_pageseg_mode: "3" });
     const result = await worker.recognize(imageUrl);

@@ -235,7 +235,7 @@ async function materializeAddonFile(name: string): Promise<string> {
   );
   const resolved = registry.convertChromeURL(uri);
   const direct = filePath(resolved);
-  if (direct) {
+  if (direct && (await scriptFileReady(direct, name))) {
     return direct;
   }
   const dir = PathUtils.join(
@@ -248,13 +248,11 @@ async function materializeAddonFile(name: string): Promise<string> {
     createAncestors: true,
   });
   const dest = PathUtils.join(dir, name);
-  if (!(await IOUtils.exists(dest))) {
-    const bytes = await readURIBytes(resolved);
-    if (!bytes.length) {
-      throw new Error(`OCR helper ${name} was empty`);
-    }
-    await IOUtils.write(dest, bytes, { tmpPath: `${dest}.partial` });
+  const bytes = await readChromeBytes(name);
+  if (bytes.length < 50) {
+    throw new Error(`OCR helper ${name} was empty`);
   }
+  await IOUtils.write(dest, bytes, { tmpPath: `${dest}.partial` });
   return dest;
 }
 
@@ -266,68 +264,31 @@ function filePath(uri: ChromeURL): string | null {
   }
 }
 
-async function readURIBytes(uri: ChromeURL): Promise<Uint8Array> {
-  const { NetUtil } = ChromeUtils.importESModule(
-    "resource://gre/modules/NetUtil.sys.mjs",
-  ) as {
-    NetUtil: {
-      newChannel: (options: {
-        uri: ChromeURL;
-        loadUsingSystemPrincipal: boolean;
-      }) => unknown;
-      asyncFetch: (
-        channel: unknown,
-        callback: (stream: BinaryStream, status: number) => void,
-      ) => void;
-    };
-  };
-  const channel = NetUtil.newChannel({
-    uri,
-    loadUsingSystemPrincipal: true,
-  });
-  const stream = await new Promise<BinaryStream>((resolve, reject) => {
-    NetUtil.asyncFetch(channel, (input, status) => {
-      if ((status & 0x80000000) !== 0) {
-        reject(new Error(`Could not read OCR helper (${status})`));
-        return;
-      }
-      resolve(input);
-    });
-  });
-  const reader = (
-    Components.classes as unknown as Record<
-      string,
-      { createInstance: (iface: unknown) => ScriptableStream }
-    >
-  )["@mozilla.org/scriptableinputstream;1"].createInstance(
-    Ci.nsIScriptableInputStream,
-  );
-  reader.init(stream);
-  const chunks: string[] = [];
-  while (reader.available()) {
-    const part = reader.read(Math.min(reader.available(), 1 << 16));
-    if (!part) {
-      break;
-    }
-    chunks.push(part);
+async function scriptFileReady(path: string, name: string): Promise<boolean> {
+  if (!path.endsWith(name) || path.includes(".xpi")) {
+    return false;
   }
-  reader.close();
-  const binary = chunks.join("");
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index++) {
-    bytes[index] = binary.charCodeAt(index) & 0xff;
+  try {
+    const info = await IOUtils.stat(path);
+    return info.size > 50;
+  } catch {
+    return false;
   }
-  return bytes;
 }
 
-type BinaryStream = object;
-
-type ScriptableStream = {
-  init: (stream: BinaryStream) => void;
-  available: () => number;
-  read: (count: number) => string;
-  close: () => void;
-};
+async function readChromeBytes(name: string): Promise<Uint8Array> {
+  const win = Zotero.getMainWindow();
+  if (!win) {
+    throw new Error("No window for OCR helper");
+  }
+  const response = await win.fetch(
+    `chrome://${config.addonRef}/content/ocr/${name}`,
+  );
+  if (!response.ok) {
+    throw new Error(`OCR helper ${name} missing (${response.status})`);
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
 
 type ChromeURL = {
   QueryInterface: (iface: unknown) => { file: { path: string } };
