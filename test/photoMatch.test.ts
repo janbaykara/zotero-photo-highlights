@@ -3,6 +3,7 @@ import {
   bandScores,
   contextAgreement,
   findPassageHits,
+  findPassageHitsAsync,
   normalizePassage,
   quotesOverlap,
   scoreWithContext,
@@ -32,10 +33,30 @@ describe("photo matching", function () {
       );
     });
 
-    it("finds an OCR-like quote with rn/m and a page number nearby", function () {
+    it("finds an OCR-like quote with rn/m and a page number nearby", async function () {
       const page = "12\nThe rnodern method is simple.\n13";
-      const hits = findPassageHits("The modern method is simple", page);
+      const quote = "The modern method is simple";
+      const hits = findPassageHits(quote, page);
       assert.isAtLeast(hits[0].score, 0.84);
+      assert.deepEqual(await findPassageHitsAsync(quote, page), hits);
+    });
+
+    it("reports how many comparisons a search has made", async function () {
+      const quote = "The modern method is simple";
+      const page = Array.from({ length: 45 }, (_, index) =>
+        index === 20 ? "rnodern method is simple" : `note${index}`,
+      ).join(" ");
+      let last = { done: 0, total: 0 };
+      let calls = 0;
+      await findPassageHitsAsync(quote, page, 5, (done, total) => {
+        calls += 1;
+        assert.isAtLeast(done, last.done);
+        assert.isAbove(total, 0);
+        assert.isAtMost(done, total);
+        last = { done, total };
+      });
+      assert.isAtLeast(calls, 1);
+      assert.equal(last.done, last.total);
     });
 
     it("auto-locates a clear best hit and asks when two are close", function () {

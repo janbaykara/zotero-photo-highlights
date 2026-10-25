@@ -1,4 +1,4 @@
-import { h } from "preact";
+import { Fragment, h } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useAtom } from "jotai";
 import { ZOTERO_ANNOTATION_COLOR_ORDER } from "@janbaykara/zotero-annotations";
@@ -16,6 +16,8 @@ import {
   clearAttachmentTextCache,
   matchQuote,
   type LocatedPlace,
+  type MatchOutcome,
+  type MatchProgress,
 } from "../photo/corpus";
 import {
   chooseImagePaths,
@@ -80,8 +82,15 @@ export function PhotoWizard(props: {
   const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS);
   const [created, setCreated] = useState<Zotero.Item[]>([]);
   const [busy, setBusy] = useState(false);
-  const [matchDetail, setMatchDetail] = useState("");
+  const [matchBook, setMatchBook] = useState("");
+  const [matchPlace, setMatchPlace] = useState({ index: 0, count: 0 });
+  const [matchSought, setMatchSought] = useState("");
   const [matchWhen, setMatchWhen] = useState("");
+  const [matchProgress, setMatchProgress] = useState<MatchProgress>({
+    activity: "wizard-matching-opening",
+    args: {},
+    ratio: 0,
+  });
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [keepPhotos, setKeepPhotos] = useAtom(
     booleanPrefAtomFamily("retainUnmatchedPhotos"),
@@ -95,6 +104,22 @@ export function PhotoWizard(props: {
 
   const photosRef = useRef(photos);
   photosRef.current = photos;
+  const locateJobs = useRef(
+    new Map<
+      string,
+      {
+        key: string;
+        done: boolean;
+        promise: Promise<MatchOutcome>;
+        ratio: number;
+        activity?: MatchProgress;
+      }
+    >(),
+  );
+  const matchingPhotoId = useRef<string | null>(null);
+  const matchingIds = useRef<string[]>([]);
+  const matchingIndex = useRef(0);
+  const matchingCount = useRef(0);
   const stepRef = useRef(step);
   stepRef.current = step;
   useEffect(() => {
@@ -264,6 +289,48 @@ export function PhotoWizard(props: {
     turnChain.current[id] = job;
   };
 
+  const rerunOcr = (id: string) => {
+    const photo = photosRef.current.find((item) => item.id === id);
+    if (!photo || photo.ocr === "running" || photo.ocr === "pending") {
+      return;
+    }
+    updatePhoto(id, {
+      ocr: "running",
+      ocrEngine: null,
+      words: [],
+      selected: [],
+      quote: "",
+    });
+    const prior = turnChain.current[id] ?? Promise.resolve();
+    const job = prior
+      .catch(() => undefined)
+      .then(async () => {
+        const latest = photosRef.current.find((item) => item.id === id);
+        if (!latest) {
+          return;
+        }
+        const record = orientRef.current[id] ?? {
+          turns: latest.turns,
+          token: latest.orientToken,
+        };
+        if (record.token !== latest.orientToken) {
+          return;
+        }
+        const token = record.token + 1;
+        orientRef.current[id] = { turns: record.turns, token };
+        updatePhoto(id, {
+          orientToken: token,
+          ocr: "running",
+          ocrEngine: null,
+          words: [],
+          selected: [],
+          quote: "",
+        });
+        await runOcr({ ...latest, orientToken: token }, lang, token);
+      });
+    turnChain.current[id] = job;
+  };
+
   const removePhoto = (id: string) => {
     const photo = photosRef.current.find((item) => item.id === id);
     if (!photo) {
@@ -384,26 +451,128 @@ export function PhotoWizard(props: {
     );
   };
 
-  const settlePhoto = async (
+  const imageRatio = (): number => {
+    const count = matchingCount.current;
+    if (!count) {
+      return 0;
+    }
+    const shown = matchingPhotoId.current;
+    const done = shown ? locateJobs.current.get(shown)?.done === true : false;
+    const finished = done ? matchingIndex.current : matchingIndex.current - 1;
+    return Math.min(1, Math.max(0, finished / count));
+  };
+
+  const paintProgress = () => {
+    const shown = matchingPhotoId.current;
+    const activity = shown
+      ? locateJobs.current.get(shown)?.activity
+      : undefined;
+    setMatchProgress({
+      activity: activity?.activity ?? "wizard-matching-opening",
+      args: activity?.args ?? {},
+      ratio: imageRatio(),
+    });
+  };
+
+  const noteProgress = (photoId: string, progress: MatchProgress) => {
+    const job = locateJobs.current.get(photoId);
+    if (!job) {
+      return;
+    }
+    job.ratio = Math.max(job.ratio, progress.ratio);
+    job.activity = progress;
+    if (stepRef.current === "matching") {
+      paintProgress();
+    }
+  };
+
+  const locatePhoto = async (
     photo: PhotoDraft,
-  ): Promise<{ kind: "saved"; item: Zotero.Item } | Decision> => {
+    sink?: (progress: MatchProgress) => void,
+  ): Promise<MatchOutcome> => {
     if (!photo.bookId || !photo.quote.trim()) {
-      return { kind: "unmatched", photoId: photo.id };
+      return { kind: "unmatched" };
     }
     const book = await Zotero.Items.getAsync(photo.bookId);
     if (!book) {
-      return { kind: "unmatched", photoId: photo.id };
+      return { kind: "unmatched" };
     }
-    let outcome;
     try {
-      outcome = await matchQuote(book, photo.quote, selectionContext(photo));
+      return await matchQuote(book, photo.quote, selectionContext(photo), sink);
     } catch (error) {
       const thrown = error as { message?: string };
       ztoolkit.log("Could not match photo", thrown?.message || String(error));
-      return { kind: "unmatched", photoId: photo.id };
+      return { kind: "unmatched" };
     }
+  };
+
+  const locateKey = (photo: PhotoDraft): string => {
+    const context = selectionContext(photo);
+    return [
+      photo.orientToken,
+      photo.bookId ?? "",
+      photo.quote,
+      context.before,
+      context.after,
+    ].join("\u0000");
+  };
+
+  const ensureLocate = (photo: PhotoDraft): Promise<MatchOutcome> => {
+    const key = locateKey(photo);
+    const existing = locateJobs.current.get(photo.id);
+    if (existing?.key === key) {
+      return existing.promise;
+    }
+    const snapshot: PhotoDraft = {
+      ...photo,
+      selected: photo.selected ? [...photo.selected] : undefined,
+    };
+    const job: {
+      key: string;
+      done: boolean;
+      promise: Promise<MatchOutcome>;
+      ratio: number;
+      activity?: MatchProgress;
+    } = {
+      key,
+      done: false,
+      ratio: 0,
+      promise: Promise.resolve({ kind: "unmatched" }),
+    };
+    job.promise = locatePhoto(snapshot, (progress) => {
+      if (locateJobs.current.get(photo.id) !== job) {
+        return;
+      }
+      noteProgress(photo.id, progress);
+    }).then((outcome) => {
+      if (locateJobs.current.get(photo.id) === job) {
+        job.done = true;
+        job.ratio = 1;
+        if (stepRef.current === "matching") {
+          paintProgress();
+        }
+      }
+      return outcome;
+    });
+    locateJobs.current.set(photo.id, job);
+    return job.promise;
+  };
+
+  const locateReady = (photo: PhotoDraft): boolean => {
+    const job = locateJobs.current.get(photo.id);
+    return !!job && job.key === locateKey(photo) && job.done;
+  };
+
+  const commitMatch = async (
+    photo: PhotoDraft,
+    outcome: MatchOutcome,
+  ): Promise<{ kind: "saved"; item: Zotero.Item } | Decision> => {
     if (outcome.kind === "located") {
       try {
+        noteProgress(photo.id, {
+          activity: "wizard-matching-saving",
+          ratio: 1,
+        });
         const saved = await saveHighlight({
           attachmentId: outcome.place.attachmentId,
           quote: photo.quote,
@@ -445,16 +614,14 @@ export function PhotoWizard(props: {
     index: number,
     count: number,
   ) => {
-    setMatchDetail(
-      getString("wizard-matching-detail", {
-        args: {
-          title: photo.bookTitle || photo.name,
-          index,
-          count,
-        },
-      }),
-    );
+    setMatchBook(photo.bookTitle || photo.name);
+    setMatchPlace({ index, count });
+    setMatchSought(shortQuote(photo.quote));
     setMatchWhen(photo.takenAt == null ? "" : formatPhotoWhen(photo.takenAt));
+    matchingPhotoId.current = photo.id;
+    matchingIndex.current = index;
+    matchingCount.current = count;
+    paintProgress();
     const frame = globalThis.requestAnimationFrame?.bind(globalThis);
     await new Promise((resolve) => {
       if (frame) {
@@ -465,19 +632,35 @@ export function PhotoWizard(props: {
     });
   };
 
-  const goReview = async () => {
+  const goReview = async (batch: PhotoDraft[] = photos) => {
     setBusy(true);
     reviewedRef.current = true;
     fromReviewRef.current = false;
-    setStep("matching");
+    matchingIds.current = batch
+      .filter((photo) => highlightGiven(photo))
+      .map((photo) => photo.id);
+    const waiting = batch.some(
+      (photo) => highlightGiven(photo) && !locateReady(photo),
+    );
+    if (waiting) {
+      stepRef.current = "matching";
+      setStep("matching");
+    }
     const nextDecisions: Decision[] = [];
     const nextCounts = { ...EMPTY_COUNTS };
     const nextCreated: Zotero.Item[] = [];
     try {
-      for (let index = 0; index < photos.length; index++) {
-        const photo = photos[index];
-        await showMatching(photo, index + 1, photos.length);
-        const result = await settlePhoto(photo);
+      for (let index = 0; index < batch.length; index++) {
+        const photo = batch[index];
+        if (!highlightGiven(photo)) {
+          nextCounts.skipped += 1;
+          await discardPhoto(photo);
+          continue;
+        }
+        if (!locateReady(photo)) {
+          await showMatching(photo, index + 1, batch.length);
+        }
+        const result = await commitMatch(photo, await ensureLocate(photo));
         if (result.kind === "saved") {
           nextCreated.push(result.item);
           nextCounts.located += 1;
@@ -497,10 +680,12 @@ export function PhotoWizard(props: {
 
   const rematchPhoto = async (photo: PhotoDraft) => {
     setBusy(true);
+    matchingIds.current = [photo.id];
+    stepRef.current = "matching";
     setStep("matching");
     try {
       await showMatching(photo, 1, 1);
-      const result = await settlePhoto(photo);
+      const result = await commitMatch(photo, await ensureLocate(photo));
       if (result.kind === "saved") {
         setCreated((current) => [...current, result.item]);
         setCounts((current) => ({ ...current, located: current.located + 1 }));
@@ -599,6 +784,49 @@ export function PhotoWizard(props: {
     }
   };
 
+  const openMark = (batch: PhotoDraft[]) => {
+    const first = batch.findIndex((photo) => !photo.skipped);
+    if (first < 0) {
+      void goReview(batch);
+      return;
+    }
+    setMarkIndex(first);
+    setStep("mark");
+  };
+
+  const abandonReviewedPhoto = async (photo: PhotoDraft) => {
+    await discardPhoto(photo);
+    setCounts((current) => ({ ...current, skipped: current.skipped + 1 }));
+    const rest = decisions.filter((item) => item.photoId !== photo.id);
+    setDecisions(rest);
+    setDecisionIndex((current) =>
+      Math.min(current, Math.max(0, rest.length - 1)),
+    );
+    setStep(rest.length ? "review" : "summary");
+  };
+
+  const skipCurrentPhoto = () => {
+    const photo = photos[markIndex];
+    if (!photo || photo.skipped) {
+      return;
+    }
+    const batch = photos.map((item) =>
+      item.id === photo.id ? { ...item, skipped: true } : item,
+    );
+    updatePhoto(photo.id, { skipped: true });
+    if (fromReviewRef.current) {
+      fromReviewRef.current = false;
+      void abandonReviewedPhoto(photo);
+      return;
+    }
+    const next = neighborIndex(batch, markIndex, 1);
+    if (next >= 0) {
+      setMarkIndex(next);
+      return;
+    }
+    void goReview(batch);
+  };
+
   return (
     <div
       class="box-border flex h-full flex-col gap-5 px-8 py-6 text-sm text-primary"
@@ -626,7 +854,7 @@ export function PhotoWizard(props: {
     >
       <header class="flex flex-none items-center justify-between gap-6 border-b border-border pb-4">
         <h1 class="min-w-0 text-lg font-semibold tracking-tight">
-          {titleFor(step)}
+          {step === "matching" && matchBook ? matchBook : titleFor(step)}
         </h1>
         <label class="flex shrink-0 items-center gap-2 text-xs text-secondary">
           <span>{getString("pref-ocr-lang")}</span>
@@ -681,16 +909,75 @@ export function PhotoWizard(props: {
               index={markIndex}
               count={photos.length}
               updatePhoto={updatePhoto}
+              onRotate={rotatePhoto}
+              onRerunOcr={rerunOcr}
+              onSkip={skipCurrentPhoto}
             />
           </div>
         ) : null}
         {step === "matching" ? (
-          <div class="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <p class="text-lg font-semibold tracking-tight">
-              {getString("wizard-matching-title")}
-            </p>
-            <p class="text-sm text-secondary">{matchDetail}</p>
-            {matchWhen ? <p class="text-sm font-medium">{matchWhen}</p> : null}
+          <div
+            class="flex h-full flex-col items-center justify-center text-center"
+            role="status"
+          >
+            <div class="flex w-full max-w-md flex-col items-center gap-8">
+              <div class="flex w-full flex-col items-center gap-3">
+                {matchPlace.count > 0 ? (
+                  <p class="flex flex-wrap items-center justify-center gap-2 text-xs text-secondary">
+                    <span>
+                      {getString("wizard-mark-count", {
+                        args: {
+                          index: matchPlace.index,
+                          count: matchPlace.count,
+                        },
+                      })}
+                    </span>
+                    {matchWhen ? <span>{matchWhen}</span> : null}
+                  </p>
+                ) : null}
+                {matchSought ? (
+                  <p class="text-sm">
+                    {getString("wizard-matching-looking-for", {
+                      args: { quote: matchSought },
+                    })}
+                  </p>
+                ) : null}
+                <div
+                  class="photo-highlights-progress"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(matchProgress.ratio * 100)}
+                  aria-label={
+                    matchPlace.count > 0
+                      ? getString("wizard-mark-count", {
+                          args: {
+                            index: matchPlace.index,
+                            count: matchPlace.count,
+                          },
+                        })
+                      : getString("wizard-matching-title")
+                  }
+                >
+                  <div
+                    style={{
+                      width: `${Math.min(100, Math.max(0, matchProgress.ratio * 100))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+              <p class="flex max-w-md items-center justify-center gap-2 text-xs text-secondary">
+                <span
+                  class="photo-highlights-spinner box-border size-4 shrink-0 rounded-full border-2 border-quarternary border-t-primary"
+                  aria-hidden="true"
+                />
+                <span>
+                  {getString(matchProgress.activity, {
+                    args: matchProgress.args ?? {},
+                  })}
+                </span>
+              </p>
+            </div>
           </div>
         ) : null}
         {step === "review" ? (
@@ -763,9 +1050,12 @@ export function PhotoWizard(props: {
                 setStep("review");
                 return;
               }
-              if (step === "mark" && markIndex > 0) {
-                setMarkIndex(markIndex - 1);
-                return;
+              if (step === "mark") {
+                const previous = neighborIndex(photos, markIndex, -1);
+                if (previous >= 0) {
+                  setMarkIndex(previous);
+                  return;
+                }
               }
               setStep(step === "mark" && !props.lockBook ? "link" : "add");
             }}
@@ -784,20 +1074,33 @@ export function PhotoWizard(props: {
             }
             onClick={() => {
               if (step === "add") {
-                setMarkIndex(0);
-                setStep(props.lockBook ? "mark" : "link");
+                if (props.lockBook) {
+                  openMark(photos);
+                } else {
+                  setStep("link");
+                }
               } else if (step === "link") {
-                setMarkIndex(0);
-                setStep("mark");
+                openMark(photos);
               } else if (fromReviewRef.current) {
                 const photo = photos[markIndex];
-                if (photo) {
+                if (photo && !highlightGiven(photo)) {
+                  fromReviewRef.current = false;
+                  updatePhoto(photo.id, { skipped: true });
+                  void abandonReviewedPhoto(photo);
+                } else if (photo) {
                   void rematchPhoto(photo);
                 }
-              } else if (step === "mark" && markIndex < photos.length - 1) {
-                setMarkIndex(markIndex + 1);
-              } else {
-                void goReview();
+              } else if (step === "mark") {
+                const photo = photos[markIndex];
+                if (photo && highlightGiven(photo)) {
+                  void ensureLocate(photo);
+                }
+                const next = neighborIndex(photos, markIndex, 1);
+                if (next >= 0) {
+                  setMarkIndex(next);
+                } else {
+                  void goReview();
+                }
               }
             }}
           >
@@ -1106,11 +1409,43 @@ function LinkStep(props: {
   );
 }
 
+function shortQuote(quote: string): string {
+  const flat = quote.replace(/\s+/g, " ").trim();
+  if (flat.length <= 180) {
+    return flat;
+  }
+  return `${flat.slice(0, 177).trim()}…`;
+}
+
+function highlightGiven(photo: PhotoDraft): boolean {
+  return !photo.skipped && photo.quote.trim().length > 0;
+}
+
+function neighborIndex(
+  list: PhotoDraft[],
+  from: number,
+  direction: 1 | -1,
+): number {
+  for (
+    let index = from + direction;
+    index >= 0 && index < list.length;
+    index += direction
+  ) {
+    if (!list[index].skipped) {
+      return index;
+    }
+  }
+  return -1;
+}
+
 function MarkStep(props: {
   photo: PhotoDraft | undefined;
   index: number;
   count: number;
   updatePhoto: (id: string, patch: Partial<PhotoDraft>) => void;
+  onRotate: (id: string, delta: number) => void;
+  onRerunOcr: (id: string) => void;
+  onSkip: () => void;
 }) {
   const photo = props.photo;
   const drag = useRef<{
@@ -1118,6 +1453,22 @@ function MarkStep(props: {
     y: number;
     anchor: number | null;
   } | null>(null);
+  const quoteRef = useRef<HTMLTextAreaElement>(null);
+  const quoteFocus = useRef(false);
+  const [editingQuote, setEditingQuote] = useState(false);
+  const photoId = photo?.id ?? "";
+  useEffect(() => {
+    setEditingQuote(false);
+  }, [photoId]);
+  useEffect(() => {
+    if (editingQuote && quoteFocus.current) {
+      quoteFocus.current = false;
+      const field = quoteRef.current;
+      field?.focus();
+      const end = field?.value.length ?? 0;
+      field?.setSelectionRange(end, end);
+    }
+  }, [editingQuote]);
   if (!photo) {
     return null;
   }
@@ -1143,6 +1494,7 @@ function MarkStep(props: {
           onDragStart={(event) => event.preventDefault()}
           onPointerDown={(event) => {
             event.preventDefault();
+            setEditingQuote(false);
             const point = relativePoint(event);
             const anchor = wordIndexAt(photo.words, point.x, point.y, false);
             drag.current = { ...point, anchor };
@@ -1204,6 +1556,34 @@ function MarkStep(props: {
             <p class="text-sm font-medium">{formatPhotoWhen(photo.takenAt)}</p>
           ) : null}
           <p class="text-xs text-secondary">{getString("wizard-mark-drag")}</p>
+          <div class="flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              class="px-2 py-1"
+              title={getString("wizard-rotate-left")}
+              aria-label={getString("wizard-rotate-left")}
+              onClick={() => props.onRotate(photo.id, -1)}
+            >
+              <RotateIcon direction="left" />
+            </button>
+            <button
+              type="button"
+              class="px-2 py-1"
+              title={getString("wizard-rotate-right")}
+              aria-label={getString("wizard-rotate-right")}
+              onClick={() => props.onRotate(photo.id, 1)}
+            >
+              <RotateIcon direction="right" />
+            </button>
+            <button
+              type="button"
+              class="px-2 py-1"
+              disabled={photo.ocr === "running" || photo.ocr === "pending"}
+              onClick={() => props.onRerunOcr(photo.id)}
+            >
+              {getString("wizard-mark-rerecognize")}
+            </button>
+          </div>
         </div>
         {photo.ocr === "running" || photo.ocr === "pending" ? (
           <p class="flex-none text-xs text-secondary">
@@ -1219,7 +1599,50 @@ function MarkStep(props: {
           <p class="text-xs text-secondary">
             {getString("wizard-mark-selected")}
           </p>
-          <p class="min-h-0 flex-1 overflow-auto text-sm">{photo.quote}</p>
+          {editingQuote ? (
+            <textarea
+              ref={quoteRef}
+              class="min-h-0 w-full flex-1 overflow-auto rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
+              style="resize:none;min-height:4rem"
+              placeholder={getString("wizard-mark-type")}
+              value={photo.quote}
+              onInput={(event) =>
+                props.updatePhoto(photo.id, {
+                  quote: (event.currentTarget as HTMLTextAreaElement).value,
+                  selected: [],
+                })
+              }
+              onBlur={() => setEditingQuote(false)}
+            />
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              class={`min-h-0 flex-1 overflow-auto text-left text-sm ${
+                photo.quote ? "" : "text-secondary"
+              }`}
+              style={
+                photo.quote
+                  ? `${quoteButtonStyle};color:inherit`
+                  : quoteButtonStyle
+              }
+              title={getString("wizard-mark-type")}
+              onClick={() => {
+                quoteFocus.current = true;
+                setEditingQuote(true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") {
+                  return;
+                }
+                event.preventDefault();
+                quoteFocus.current = true;
+                setEditingQuote(true);
+              }}
+            >
+              {photo.quote || getString("wizard-mark-type")}
+            </div>
+          )}
         </div>
         <div
           class="flex flex-none flex-wrap gap-1.5"
@@ -1243,10 +1666,33 @@ function MarkStep(props: {
             />
           ))}
         </div>
+        <button
+          type="button"
+          class="flex-none self-start"
+          onClick={props.onSkip}
+        >
+          {getString("wizard-mark-skip")}
+        </button>
       </aside>
     </div>
   );
 }
+
+const quoteButtonStyle = [
+  "display:block",
+  "flex:1 1 auto",
+  "min-height:0",
+  "width:100%",
+  "overflow:auto",
+  "background:transparent",
+  "margin:0",
+  "padding:0",
+  "font:inherit",
+  "text-align:left",
+  "white-space:pre-wrap",
+  "overflow-wrap:anywhere",
+  "cursor:text",
+].join(";");
 
 function photoFrameStyle(photo: PhotoDraft): string {
   const width = photo.imageWidth || 1;
@@ -1568,6 +2014,7 @@ function ReviewStep(props: {
       props.onDecide("place", place);
     }
   };
+  const snippet = shortQuote(photo.quote);
   return (
     <div class="flex flex-col gap-4">
       <div class="flex items-start gap-4">
@@ -1578,21 +2025,160 @@ function ReviewStep(props: {
           class="shrink-0 rounded-md border border-border bg-background-toolbar object-contain"
           style="width:8rem;height:8rem"
         />
-        <div class="flex min-w-0 flex-1 flex-col gap-2">
-          <div class="flex items-center justify-between gap-3">
-            <div class="flex min-w-0 flex-col gap-1">
-              <p class="text-lg font-semibold">
-                {getString("wizard-mark-count", {
-                  args: { index: props.index + 1, count: props.count },
-                })}
-              </p>
-              <p class="text-sm text-secondary">
-                {photo.takenAt != null
-                  ? formatPhotoWhen(photo.takenAt)
-                  : photo.name}
-              </p>
+        <div class="flex min-w-0 flex-1 flex-col gap-1">
+          <p class="text-lg font-semibold">
+            {getString("wizard-mark-count", {
+              args: { index: props.index + 1, count: props.count },
+            })}
+          </p>
+          <p class="text-sm text-secondary">
+            {photo.takenAt != null
+              ? formatPhotoWhen(photo.takenAt)
+              : photo.name}
+          </p>
+          {snippet ? (
+            <p class="text-sm">
+              <span
+                style={{
+                  background: colorWithAlpha(photo.color, 0.6),
+                  borderRadius: "2px",
+                  padding: "0 0.15em",
+                }}
+              >
+                {snippet}
+              </span>
+            </p>
+          ) : null}
+          {editingQuote ? (
+            <label class="flex flex-col gap-1 text-xs text-secondary">
+              {getString("wizard-review-edit")}
+              <textarea
+                ref={quoteRef}
+                class="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
+                rows={3}
+                value={photo.quote}
+                onInput={(event) =>
+                  props.onQuote(
+                    (event.currentTarget as HTMLTextAreaElement).value,
+                  )
+                }
+              />
+            </label>
+          ) : null}
+          {addingComment ? (
+            <label class="flex flex-col gap-1 text-xs text-secondary">
+              {getString("wizard-review-add-comment")}
+              <textarea
+                ref={commentRef}
+                class="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
+                rows={2}
+                value={photo.comment}
+                onInput={(event) =>
+                  props.onComment(
+                    (event.currentTarget as HTMLTextAreaElement).value,
+                  )
+                }
+              />
+            </label>
+          ) : null}
+          <div class="flex flex-wrap gap-1.5">
+            {editingQuote ? null : (
+              <button
+                type="button"
+                style={quietButtonStyle()}
+                onClick={() => {
+                  quoteFocus.current = true;
+                  setEditingQuote(true);
+                }}
+              >
+                {getString("wizard-review-edit")}
+              </button>
+            )}
+            {editingQuote ? (
+              <button
+                type="button"
+                style={quietButtonStyle()}
+                onClick={props.onSearch}
+              >
+                {getString("wizard-review-search-again")}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              style={quietButtonStyle()}
+              onClick={props.onRedo}
+            >
+              {getString("wizard-review-redo")}
+            </button>
+            {addingComment ? null : (
+              <button
+                type="button"
+                style={quietButtonStyle()}
+                onClick={() => {
+                  commentFocus.current = true;
+                  setAddingComment(true);
+                }}
+              >
+                {getString("wizard-review-add-comment")}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-col gap-1 rounded-md border border-border bg-background-toolbar px-3 py-3">
+        <p class="text-lg font-semibold">{getString(copy.title)}</p>
+        <p class="text-sm text-secondary">{getString(copy.help)}</p>
+        {decision.kind === "duplicate" ? (
+          <Fragment>
+            <p class="mt-1 text-sm font-semibold">
+              {getString("wizard-review-page", {
+                args: { label: decision.place.label },
+              })}
+            </p>
+            <p class="text-sm text-secondary">{decision.existingQuote}</p>
+          </Fragment>
+        ) : null}
+      </div>
+      <div class="flex flex-col gap-2 rounded-md border border-border px-3 py-3">
+        {decision.kind === "ambiguous" ? (
+          <div class="flex flex-col gap-2">
+            <div
+              class="min-w-0"
+              style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;align-items:stretch;"
+            >
+              {decision.places.map((place, index) => {
+                const selected =
+                  choice?.kind === "place" && choice.index === index;
+                return (
+                  <button
+                    key={`${index}:${place.positionJSON}`}
+                    type="button"
+                    aria-pressed={selected}
+                    style={placeCardStyle(selected)}
+                    onClick={() => setChoice({ kind: "place", index })}
+                  >
+                    <PlaceCardBody place={place} />
+                  </button>
+                );
+              })}
             </div>
-            {decision.kind === "ambiguous" ? (
+            <button
+              type="button"
+              aria-pressed={choice?.kind === "none"}
+              style={placeCardStyle(choice?.kind === "none")}
+              onClick={() => setChoice({ kind: "none" })}
+            >
+              <span class="text-sm font-semibold">
+                {getString("wizard-review-none")}
+              </span>
+            </button>
+            {choice?.kind === "none" ? (
+              <KeepPhotoToggle
+                checked={props.keepPhotos}
+                onChange={props.onKeep}
+              />
+            ) : null}
+            <div class="flex justify-end">
               <button
                 type="button"
                 disabled={choice == null}
@@ -1601,154 +2187,35 @@ function ReviewStep(props: {
               >
                 {getString("wizard-review-save")}
               </button>
-            ) : null}
+            </div>
           </div>
-          <div class="flex flex-col gap-1 rounded-md border border-border bg-background-toolbar px-3 py-3">
-            <p class="text-lg font-semibold">{getString(copy.title)}</p>
-            <p class="text-sm text-secondary">{getString(copy.help)}</p>
-          </div>
-        </div>
-      </div>
-      {decision.kind === "duplicate" ? (
-        <div class="flex flex-col gap-1">
-          <p class="text-sm font-semibold">
-            {getString("wizard-review-page", {
-              args: { label: decision.place.label },
-            })}
-          </p>
-          <p class="text-sm text-secondary">{decision.existingQuote}</p>
-        </div>
-      ) : null}
-      {decision.kind === "ambiguous" ? (
-        <div class="flex flex-col gap-2">
-          <div
-            class="min-w-0"
-            style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;align-items:stretch;"
-          >
-            {decision.places.map((place, index) => {
-              const selected =
-                choice?.kind === "place" && choice.index === index;
-              return (
-                <button
-                  key={`${index}:${place.positionJSON}`}
-                  type="button"
-                  aria-pressed={selected}
-                  style={placeCardStyle(selected)}
-                  onClick={() => setChoice({ kind: "place", index })}
-                >
-                  <PlaceCardBody place={place} />
-                </button>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            aria-pressed={choice?.kind === "none"}
-            style={placeCardStyle(choice?.kind === "none")}
-            onClick={() => setChoice({ kind: "none" })}
-          >
-            <span class="text-sm font-semibold">
-              {getString("wizard-review-none")}
-            </span>
-          </button>
-        </div>
-      ) : null}
-      {addingComment ? (
-        <label class="flex flex-col gap-1 text-xs text-secondary">
-          {getString("wizard-review-add-comment")}
-          <textarea
-            ref={commentRef}
-            class="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
-            rows={2}
-            value={photo.comment}
-            onInput={(event) =>
-              props.onComment(
-                (event.currentTarget as HTMLTextAreaElement).value,
-              )
-            }
-          />
-        </label>
-      ) : (
-        <div>
-          <button
-            type="button"
-            onClick={() => {
-              commentFocus.current = true;
-              setAddingComment(true);
-            }}
-          >
-            {getString("wizard-review-add-comment")}
-          </button>
-        </div>
-      )}
-      {decision.kind === "ambiguous" && choice?.kind === "none" ? (
-        <KeepPhotoToggle checked={props.keepPhotos} onChange={props.onKeep} />
-      ) : null}
-      {decision.kind === "duplicate" ? (
-        <div class="flex flex-wrap gap-2">
-          <button type="button" onClick={() => props.onDecide("skip")}>
-            {getString("wizard-review-skip")}
-          </button>
-          <button type="button" onClick={() => props.onDecide("create")}>
-            {getString("wizard-review-create")}
-          </button>
-        </div>
-      ) : null}
-      {decision.kind === "unmatched" ? (
-        <div class="flex flex-col gap-2">
-          <KeepPhotoToggle checked={props.keepPhotos} onChange={props.onKeep} />
-          <div class="flex flex-wrap gap-2">
-            <button type="button" onClick={() => props.onDecide("unlocated")}>
-              {getString("wizard-review-unlocated")}
-            </button>
-            <button type="button" onClick={() => props.onDecide("skip")}>
-              {getString("wizard-review-skip-reader")}
-            </button>
-          </div>
-        </div>
-      ) : null}
-      <div class="flex flex-col gap-2 rounded-md border border-border px-3 py-3">
-        <p class="text-sm font-semibold">{getString("wizard-review-revise")}</p>
-        <p class="text-xs text-secondary">
-          {getString("wizard-review-revise-help")}
-        </p>
-        {editingQuote ? (
-          <label class="flex flex-col gap-1 text-xs text-secondary">
-            {getString("wizard-review-edit")}
-            <textarea
-              ref={quoteRef}
-              class="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
-              rows={3}
-              value={photo.quote}
-              onInput={(event) =>
-                props.onQuote(
-                  (event.currentTarget as HTMLTextAreaElement).value,
-                )
-              }
-            />
-          </label>
         ) : null}
-        <div class="flex flex-wrap gap-2">
-          {editingQuote ? null : (
-            <button
-              type="button"
-              onClick={() => {
-                quoteFocus.current = true;
-                setEditingQuote(true);
-              }}
-            >
-              {getString("wizard-review-edit")}
+        {decision.kind === "duplicate" ? (
+          <div class="flex flex-wrap gap-2">
+            <button type="button" onClick={() => props.onDecide("skip")}>
+              {getString("wizard-review-skip")}
             </button>
-          )}
-          {editingQuote ? (
-            <button type="button" onClick={props.onSearch}>
-              {getString("wizard-review-search-again")}
+            <button type="button" onClick={() => props.onDecide("create")}>
+              {getString("wizard-review-create")}
             </button>
-          ) : null}
-          <button type="button" onClick={props.onRedo}>
-            {getString("wizard-review-redo")}
-          </button>
-        </div>
+          </div>
+        ) : null}
+        {decision.kind === "unmatched" ? (
+          <div class="flex flex-col gap-2">
+            <KeepPhotoToggle
+              checked={props.keepPhotos}
+              onChange={props.onKeep}
+            />
+            <div class="flex flex-wrap gap-2">
+              <button type="button" onClick={() => props.onDecide("unlocated")}>
+                {getString("wizard-review-unlocated")}
+              </button>
+              <button type="button" onClick={() => props.onDecide("skip")}>
+                {getString("wizard-review-skip-reader")}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -1766,7 +2233,31 @@ function saveButtonStyle(disabled: boolean): string {
     "background:var(--accent-blue, #2ea8e5)",
     "color:#fff",
     "font-weight:600",
+    "max-height:none",
+    "height:auto",
     disabled ? "opacity:0.4" : "cursor:pointer",
+  ].join(";");
+}
+
+function quietButtonStyle(): string {
+  return [
+    "appearance:none",
+    "-moz-appearance:none",
+    "display:inline-flex",
+    "align-items:center",
+    "flex:0 0 auto",
+    "margin:0",
+    "padding:0.1rem 0.4rem",
+    "border:1px solid color-mix(in srgb, currentColor 22%, transparent)",
+    "border-radius:4px",
+    "background:transparent",
+    "color:var(--fill-secondary)",
+    "font-size:12px",
+    "font-weight:400",
+    "line-height:1.3",
+    "max-height:none",
+    "height:auto",
+    "cursor:pointer",
   ].join(";");
 }
 
@@ -1781,7 +2272,7 @@ function PlaceCardBody(props: { place: LocatedPlace }) {
           ? "wizard-review-place-middle"
           : null;
   return (
-    <>
+    <Fragment>
       <span class="text-xs font-semibold" style={placeLineStyle}>
         {getString("wizard-review-page", { args: { label: place.label } })}
       </span>
@@ -1803,12 +2294,12 @@ function PlaceCardBody(props: { place: LocatedPlace }) {
           {place.trail}
         </span>
       ) : null}
-    </>
+    </Fragment>
   );
 }
 
 const placeLineStyle =
-  "display:block;white-space:normal;flex:0 0 auto;min-width:0;max-width:100%";
+  "display:block;white-space:normal;overflow-wrap:anywhere;flex:0 0 auto;min-width:0;max-width:100%";
 
 function placeCardStyle(selected: boolean): string {
   const border = selected
@@ -1825,8 +2316,10 @@ function placeCardStyle(selected: boolean): string {
     "align-items:flex-start",
     "gap:0.25rem",
     "width:100%",
-    "height:100%",
+    "height:auto",
+    "max-height:none",
     "min-width:0",
+    "overflow-wrap:anywhere",
     "margin:0",
     "box-sizing:border-box",
     "padding:0.6rem 0.75rem",

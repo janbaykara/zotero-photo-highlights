@@ -40,6 +40,8 @@ export type PhotoDraft = {
   bookId: number | null;
   bookTitle: string;
   kept: boolean;
+  /** Left out on the mark step. Not matched and not imported. */
+  skipped?: boolean;
 };
 
 export const OCR_LANGUAGES: { code: string; key: string }[] = [

@@ -198,6 +198,83 @@ export function findPassageHits(
   if (needle.length < 8 || !hay) {
     return [];
   }
+  const exact = exactPassageHits(needle, hay, limit);
+  if (exact.length) {
+    return exact;
+  }
+
+  const quoteWords = wordsOf(needle);
+  const textWords = wordsOf(hay);
+  const anchors = quoteWords.filter((word) => word.text.length >= 5);
+  const seeds = anchors.length
+    ? anchors
+    : quoteWords.filter((w) => w.text.length >= 4);
+  const seen = new Map<number, PassageHit>();
+
+  for (const seed of seeds) {
+    for (const word of textWords) {
+      if (wordSimilarity(seed.text, word.text) < 0.75) {
+        continue;
+      }
+      considerPassageWindow(seen, hay, needle, word.start - seed.start);
+    }
+  }
+
+  return [...seen.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/**
+ * Same hits as `findPassageHits`, but lets the UI paint between batches of
+ * comparisons so a long book does not freeze the wizard.
+ */
+export async function findPassageHitsAsync(
+  quote: string,
+  text: string,
+  limit = 5,
+  onCompare?: (done: number, total: number) => void,
+): Promise<PassageHit[]> {
+  const needle = normalizePassage(quote);
+  const hay = normalizePassage(text);
+  if (needle.length < 8 || !hay) {
+    return [];
+  }
+  const exact = exactPassageHits(needle, hay, limit);
+  if (exact.length) {
+    return exact;
+  }
+  const quoteWords = wordsOf(needle);
+  const textWords = wordsOf(hay);
+  const anchors = quoteWords.filter((word) => word.text.length >= 5);
+  const seeds = anchors.length
+    ? anchors
+    : quoteWords.filter((word) => word.text.length >= 4);
+  const seen = new Map<number, PassageHit>();
+  const total = seeds.length * textWords.length;
+  let steps = 0;
+  for (const seed of seeds) {
+    for (const word of textWords) {
+      steps += 1;
+      if (steps % 40 === 0) {
+        onCompare?.(steps, total);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      if (wordSimilarity(seed.text, word.text) < 0.75) {
+        continue;
+      }
+      considerPassageWindow(seen, hay, needle, word.start - seed.start);
+    }
+  }
+  if (steps > 0 && steps % 40 !== 0) {
+    onCompare?.(steps, total);
+  }
+  return [...seen.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+function exactPassageHits(
+  needle: string,
+  hay: string,
+  limit: number,
+): PassageHit[] {
   const exact: PassageHit[] = [];
   let from = 0;
   while (exact.length < limit) {
@@ -213,43 +290,27 @@ export function findPassageHits(
     });
     from = start + needle.length;
   }
-  if (exact.length) {
-    return exact;
+  return exact;
+}
+
+function considerPassageWindow(
+  seen: Map<number, PassageHit>,
+  hay: string,
+  needle: string,
+  start: number,
+): void {
+  const clamped = Math.max(0, Math.min(start, Math.max(0, hay.length - 1)));
+  const end = Math.min(hay.length, clamped + needle.length);
+  const slice = hay.slice(clamped, end);
+  if (slice.length < Math.min(8, needle.length)) {
+    return;
   }
-
-  const quoteWords = wordsOf(needle);
-  const textWords = wordsOf(hay);
-  const anchors = quoteWords.filter((word) => word.text.length >= 5);
-  const seeds = anchors.length
-    ? anchors
-    : quoteWords.filter((w) => w.text.length >= 4);
-  const seen = new Map<number, PassageHit>();
-
-  const consider = (start: number) => {
-    const clamped = Math.max(0, Math.min(start, Math.max(0, hay.length - 1)));
-    const end = Math.min(hay.length, clamped + needle.length);
-    const slice = hay.slice(clamped, end);
-    if (slice.length < Math.min(8, needle.length)) {
-      return;
-    }
-    const score = editSimilarity(needle, slice);
-    const bucket = Math.round(clamped / 8);
-    const prev = seen.get(bucket);
-    if (!prev || score > prev.score) {
-      seen.set(bucket, { score, start: clamped, end, matched: slice });
-    }
-  };
-
-  for (const seed of seeds) {
-    for (const word of textWords) {
-      if (wordSimilarity(seed.text, word.text) < 0.75) {
-        continue;
-      }
-      consider(word.start - seed.start);
-    }
+  const score = editSimilarity(needle, slice);
+  const bucket = Math.round(clamped / 8);
+  const prev = seen.get(bucket);
+  if (!prev || score > prev.score) {
+    seen.set(bucket, { score, start: clamped, end, matched: slice });
   }
-
-  return [...seen.values()].sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
 function wordSimilarity(left: string, right: string): number {

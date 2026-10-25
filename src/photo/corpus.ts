@@ -2,7 +2,7 @@ import { EpubCFI } from "epubjs";
 import {
   bandScores,
   contextAgreement,
-  findPassageHits,
+  findPassageHitsAsync,
   normalizePassage,
   normalizeWithMap,
   quotesOverlap,
@@ -59,14 +59,47 @@ type Slice = {
 };
 
 const cache = new Map<number, Slice[]>();
+const loading = new Map<number, Promise<Slice[]>>();
+
+/** Share of one photo's bar spent reading the file, before the search. */
+const READ_END = 0.72;
+const SEARCH_END = 0.96;
+
+export type MatchProgress = {
+  activity:
+    | "wizard-matching-opening"
+    | "wizard-matching-reading-pdf"
+    | "wizard-matching-reading-epub"
+    | "wizard-matching-searching"
+    | "wizard-matching-checking"
+    | "wizard-matching-saving";
+  args?: Record<string, string | number>;
+  /** 0–1 for this photo. */
+  ratio: number;
+};
+
+export type MatchProgressSink = (progress: MatchProgress) => void;
 
 export function clearAttachmentTextCache(): void {
   cache.clear();
+  loading.clear();
 }
 
-export async function attachmentSlices(book: Zotero.Item): Promise<Slice[]> {
+function breathe(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+export async function attachmentSlices(
+  book: Zotero.Item,
+  sink?: MatchProgressSink,
+): Promise<Slice[]> {
   const attachments = book.getAttachments?.() || [];
-  const slices: Slice[] = [];
+  const slots: Array<
+    | { kind: "ready"; slices: Slice[] }
+    | { kind: "pending"; promise: Promise<Slice[]> }
+    | { kind: "load"; item: Zotero.Item }
+  > = [];
+  const loads: Zotero.Item[] = [];
   for (const id of attachments) {
     const item = await Zotero.Items.getAsync(id);
     if (!item || item.isAnnotation?.()) {
@@ -74,26 +107,72 @@ export async function attachmentSlices(book: Zotero.Item): Promise<Slice[]> {
     }
     const cached = cache.get(item.id);
     if (cached) {
-      slices.push(...cached);
+      slots.push({ kind: "ready", slices: cached });
       continue;
     }
-    const next = await slicesForAttachment(item);
-    cache.set(item.id, next);
-    slices.push(...next);
+    const pending = loading.get(item.id);
+    if (pending) {
+      slots.push({ kind: "pending", promise: pending });
+      continue;
+    }
+    if (!isPdf(item) && !isEpub(item)) {
+      continue;
+    }
+    loads.push(item);
+    slots.push({ kind: "load", item });
+  }
+  const share = loads.length ? READ_END / loads.length : 0;
+  const slices: Slice[] = [];
+  for (const slot of slots) {
+    if (slot.kind === "ready") {
+      slices.push(...slot.slices);
+      continue;
+    }
+    if (slot.kind === "pending") {
+      slices.push(...(await slot.promise));
+      continue;
+    }
+    const index = loads.indexOf(slot.item);
+    const base = share * Math.max(0, index);
+    const scaled: MatchProgressSink | undefined = sink
+      ? (progress) => {
+          sink({
+            ...progress,
+            ratio: base + Math.min(1, Math.max(0, progress.ratio)) * share,
+          });
+        }
+      : undefined;
+    let pending = loading.get(slot.item.id);
+    if (!pending) {
+      pending = (async () => {
+        try {
+          const next = await slicesForAttachment(slot.item, scaled);
+          cache.set(slot.item.id, next);
+          return next;
+        } finally {
+          loading.delete(slot.item.id);
+        }
+      })();
+      loading.set(slot.item.id, pending);
+    }
+    slices.push(...(await pending));
   }
   return slices;
 }
 
-async function slicesForAttachment(item: Zotero.Item): Promise<Slice[]> {
+async function slicesForAttachment(
+  item: Zotero.Item,
+  sink?: MatchProgressSink,
+): Promise<Slice[]> {
   const path = await item.getFilePathAsync();
   if (!path) {
     return [];
   }
   if (isPdf(item)) {
-    return pdfSlices(item.id, await IOUtils.read(path));
+    return pdfSlices(item.id, await IOUtils.read(path), sink);
   }
   if (isEpub(item)) {
-    return epubSlices(item.id, path);
+    return epubSlices(item.id, path, sink);
   }
   return [];
 }
@@ -114,16 +193,24 @@ function isEpub(item: Zotero.Item): boolean {
 async function pdfSlices(
   attachmentId: number,
   bytes: Uint8Array,
+  sink?: MatchProgressSink,
 ): Promise<Slice[]> {
   const pdfjs = await loadPdfjs();
   if (!pdfjs) {
     return [];
   }
+  sink?.({ activity: "wizard-matching-opening", ratio: 0 });
   const doc = await pdfjs.getDocument({ data: bytes, disableWorker: true })
     .promise;
   const labels = (await readPdfPageLabels(bytes, doc.numPages)) || [];
   const slices: Slice[] = [];
   for (let page = 1; page <= doc.numPages; page++) {
+    sink?.({
+      activity: "wizard-matching-reading-pdf",
+      args: { page, pages: doc.numPages },
+      ratio: page / doc.numPages,
+    });
+    await breathe();
     const pdfPage = await doc.getPage(page);
     const content = await pdfPage.getTextContent();
     const items = (content.items || [])
@@ -171,8 +258,10 @@ function useMainWindowRealm(): void {
 async function epubSlices(
   attachmentId: number,
   path: string,
+  sink?: MatchProgressSink,
 ): Promise<Slice[]> {
   useMainWindowRealm();
+  sink?.({ activity: "wizard-matching-opening", ratio: 0 });
   const reader = openZip(path);
   try {
     const container = parseXml(readZipEntry(reader, "META-INF/container.xml"));
@@ -190,12 +279,18 @@ async function epubSlices(
       }
     }
     const slices: Slice[] = [];
-    let index = 0;
-    for (const itemref of named(opf, "itemref")) {
+    const itemrefs = named(opf, "itemref");
+    for (let index = 0; index < itemrefs.length; index++) {
+      const itemref = itemrefs[index];
+      sink?.({
+        activity: "wizard-matching-reading-epub",
+        args: { section: index + 1, sections: itemrefs.length },
+        ratio: (index + 1) / itemrefs.length,
+      });
+      await breathe();
       const idref = itemref.getAttribute("idref") || "";
       const href = manifest.get(idref);
       const spineIndex = index;
-      index += 1;
       if (!href) {
         continue;
       }
@@ -406,18 +501,45 @@ export async function matchQuote(
   book: Zotero.Item,
   quote: string,
   context?: PassageContext,
+  sink?: MatchProgressSink,
 ): Promise<MatchOutcome> {
-  const slices = await attachmentSlices(book);
+  sink?.({ activity: "wizard-matching-opening", ratio: 0 });
+  let sawReading = false;
+  const slices = await attachmentSlices(book, (progress) => {
+    if (
+      progress.activity === "wizard-matching-reading-pdf" ||
+      progress.activity === "wizard-matching-reading-epub"
+    ) {
+      sawReading = true;
+    }
+    sink?.(progress);
+  });
   const needle = normalizePassage(quote);
   const before = context?.before || "";
   const after = context?.after || "";
   const candidates: { hit: PassageHit; slice: Slice; score: number }[] = [];
+  const searchFrom = sawReading ? READ_END : 0;
+  const span = slices.length ? (SEARCH_END - searchFrom) / slices.length : 0;
   for (let index = 0; index < slices.length; index++) {
-    if (index % 2 === 0) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    await breathe();
     const slice = slices[index];
-    for (const hit of findPassageHits(needle, slice.text)) {
+    const start = searchFrom + span * index;
+    const reportSlice = (done: number, total: number) => {
+      const fraction = total > 0 ? done / total : 1;
+      sink?.({
+        activity: "wizard-matching-searching",
+        args: {
+          label: slice.label,
+          index: index + 1,
+          count: slices.length,
+        },
+        ratio: start + span * fraction,
+      });
+    };
+    reportSlice(0, 1);
+    const hits = await findPassageHitsAsync(needle, slice.text, 5, reportSlice);
+    reportSlice(1, 1);
+    for (const hit of hits) {
       candidates.push({
         hit,
         slice,
@@ -432,6 +554,7 @@ export async function matchQuote(
   if (band.kind === "unmatched") {
     return { kind: "unmatched" };
   }
+  sink?.({ activity: "wizard-matching-checking", ratio: 0.98 });
   if (band.kind === "located") {
     const place = await placeFor(band.hit.slice, band.hit.hit, quote);
     if (!place) {
