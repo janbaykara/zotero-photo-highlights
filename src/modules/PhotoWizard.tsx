@@ -2532,7 +2532,7 @@ function ReviewStep(props: {
       return;
     }
     if (choice.kind === "none") {
-      props.onDecide("unlocated");
+      props.onDecide("skip");
       return;
     }
     const place = decision.places[choice.index];
@@ -2711,7 +2711,11 @@ function ReviewStep(props: {
                 style={saveButtonStyle(choice == null)}
                 onClick={saveChoice}
               >
-                {getString("wizard-review-save")}
+                {getString(
+                  choice?.kind === "none"
+                    ? "wizard-review-skip"
+                    : "wizard-review-save",
+                )}
               </button>
             </div>
           </div>
