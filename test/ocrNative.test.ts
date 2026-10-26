@@ -187,6 +187,32 @@ describe("native OCR", function () {
       assert.equal(parseNativePayload(text)?.ok, true);
       assert.equal(text, payload);
     });
+
+    it("decodes UTF-16LE Windows output split across a code unit", async function () {
+      const payload =
+        '{"ok":false,"reason":"recognize-failed","detail":"accès denied"}';
+      const bytes = new Uint8Array(payload.length * 2);
+      for (let index = 0; index < payload.length; index++) {
+        bytes[index * 2] = payload.charCodeAt(index);
+      }
+      const chunks = [bytes.slice(0, 7), bytes.slice(7)];
+      let index = 0;
+      const text = await readPipeString({
+        read: async () => {
+          const next = chunks[index];
+          index += 1;
+          if (!next) {
+            return new ArrayBuffer(0);
+          }
+          return next.buffer.slice(
+            next.byteOffset,
+            next.byteOffset + next.byteLength,
+          );
+        },
+      });
+      assert.equal(parseNativePayload(text)?.reason, "recognize-failed");
+      assert.equal(parseNativePayload(text)?.detail, "accès denied");
+    });
   });
 
   describe("tesseract lines", function () {

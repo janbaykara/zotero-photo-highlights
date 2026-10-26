@@ -24,16 +24,49 @@ type Pipe = {
 
 /** A null-length read stops at the first chunk. A page of boxes does not fit in it. */
 export async function readPipeString(pipe: Pipe): Promise<string> {
-  const decoder = new TextDecoder();
-  let text = "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
   for (;;) {
     const buffer = await pipe.read();
     if (buffer.byteLength === 0) {
       break;
     }
-    text += decoder.decode(buffer, { stream: true });
+    const bytes = new Uint8Array(buffer);
+    chunks.push(bytes);
+    total += bytes.byteLength;
   }
-  return text + decoder.decode();
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return decodePipeBytes(merged);
+}
+
+/** PowerShell 5.1 writes UTF-16LE into a redirected pipe. */
+function decodePipeBytes(bytes: Uint8Array): string {
+  const encoding = isUtf16Le(bytes) ? "utf-16le" : "utf-8";
+  return new TextDecoder(encoding).decode(bytes).replace(/^\uFEFF/, "");
+}
+
+function isUtf16Le(bytes: Uint8Array): boolean {
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return true;
+  }
+  if (bytes.length < 4) {
+    return false;
+  }
+  const sample = Math.min(bytes.length, 80);
+  let nulls = 0;
+  let pairs = 0;
+  for (let index = 1; index < sample; index += 2) {
+    pairs += 1;
+    if (bytes[index] === 0) {
+      nulls += 1;
+    }
+  }
+  return nulls * 2 >= pairs;
 }
 
 export type NativeRecognition =
@@ -168,6 +201,7 @@ async function runHelper(
           reason,
           detail: payload?.detail,
           stderr: result.stderr,
+          stdout: result.stdout,
         }),
       );
       return { outcome: "fallback", reason };
@@ -179,7 +213,7 @@ async function runHelper(
         reason: payload?.reason,
         detail: payload?.detail,
         stderr: result.stderr,
-        stdout: payload ? "" : result.stdout,
+        stdout: result.stdout,
       }),
     );
     return { outcome: "fallback", reason: payload?.reason || "failed" };

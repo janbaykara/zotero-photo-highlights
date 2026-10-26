@@ -23,9 +23,28 @@ function Write-Payload([string]$json) {
   [Console]::Out.WriteLine($json)
 }
 
-function Fail([int]$code, [string]$reason) {
-  Write-Payload ('{"ok":false,"reason":"' + (Escape-Json $reason) + '"}')
+function Fail([int]$code, [string]$reason, [string]$detail) {
+  $body = '{"ok":false,"reason":"' + (Escape-Json $reason) + '"'
+  if ($detail) {
+    $body += ',"detail":"' + (Escape-Json $detail) + '"'
+  }
+  Write-Payload ($body + "}")
   exit $code
+}
+
+function Error-Detail($record) {
+  $message = ""
+  if ($record.Exception -and $record.Exception.Message) {
+    $message = [string]$record.Exception.Message
+  } elseif ($record) {
+    $message = [string]$record
+  }
+  $stack = ""
+  if ($record.ScriptStackTrace) {
+    $stack = [string]$record.ScriptStackTrace
+  }
+  if ($stack) { return $message + "`n" + $stack }
+  return $message
 }
 
 function Pick-Language($spec, $supported) {
@@ -56,43 +75,57 @@ function Await-WinRt($winRtTask, $resultType) {
 try {
   $specObj = $Spec | ConvertFrom-Json
 } catch {
-  Fail 1 "bad-args"
+  Fail 1 "bad-args" (Error-Detail $_)
 }
 
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
-$null = [Windows.Storage.FileAccessMode, Windows.Storage, ContentType = WindowsRuntime]
-$null = [Windows.Storage.Streams.IRandomAccessStream, Windows.Storage.Streams, ContentType = WindowsRuntime]
-$null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics.Imaging, ContentType = WindowsRuntime]
-$null = [Windows.Graphics.Imaging.BitmapPixelFormat, Windows.Graphics.Imaging, ContentType = WindowsRuntime]
-$null = [Windows.Graphics.Imaging.BitmapAlphaMode, Windows.Graphics.Imaging, ContentType = WindowsRuntime]
-$null = [Windows.Graphics.Imaging.SoftwareBitmap, Windows.Graphics.Imaging, ContentType = WindowsRuntime]
-$null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
-$null = [Windows.Media.Ocr.OcrResult, Windows.Foundation, ContentType = WindowsRuntime]
-$null = [Windows.Globalization.Language, Windows.Foundation, ContentType = WindowsRuntime]
+try {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
+  $null = [Windows.Storage.FileAccessMode, Windows.Storage, ContentType = WindowsRuntime]
+  $null = [Windows.Storage.Streams.IRandomAccessStream, Windows.Storage.Streams, ContentType = WindowsRuntime]
+  $null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics.Imaging, ContentType = WindowsRuntime]
+  $null = [Windows.Graphics.Imaging.BitmapPixelFormat, Windows.Graphics.Imaging, ContentType = WindowsRuntime]
+  $null = [Windows.Graphics.Imaging.BitmapAlphaMode, Windows.Graphics.Imaging, ContentType = WindowsRuntime]
+  $null = [Windows.Graphics.Imaging.SoftwareBitmap, Windows.Graphics.Imaging, ContentType = WindowsRuntime]
+  $null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
+  $null = [Windows.Media.Ocr.OcrResult, Windows.Foundation, ContentType = WindowsRuntime]
+  $null = [Windows.Globalization.Language, Windows.Foundation, ContentType = WindowsRuntime]
 
-$script:AsTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
-  $_.Name -eq "AsTask" -and
-  $_.GetParameters().Count -eq 1 -and
-  $_.GetParameters()[0].ParameterType.Name -eq "IAsyncOperation``1"
-}) | Select-Object -First 1
+  $script:AsTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+    $_.Name -eq "AsTask" -and
+    $_.GetParameters().Count -eq 1 -and
+    $_.GetParameters()[0].ParameterType.Name -eq "IAsyncOperation``1"
+  }) | Select-Object -First 1
+} catch {
+  Fail 1 "recognize-failed" (Error-Detail $_)
+}
 
 if (-not $script:AsTaskGeneric) {
-  Fail 1 "winrt-task"
+  Fail 1 "winrt-task" "AsTask was not found"
 }
 
-$available = @([Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages)
-$chosen = Pick-Language $specObj $available
-if (-not $chosen) { Fail 2 "unsupported-language" }
-if (-not [Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($chosen)) {
-  Fail 2 "unsupported-language"
-}
-$engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($chosen)
-if (-not $engine) { Fail 2 "unsupported-language" }
-
-$file = Await-WinRt ([Windows.Storage.StorageFile]::GetFileFromPathAsync($Image)) ([Windows.Storage.StorageFile])
-$stream = Await-WinRt ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
+$chosen = $null
+$engine = $null
 try {
+  $available = @([Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages)
+  $chosen = Pick-Language $specObj $available
+  if ($chosen -and [Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($chosen)) {
+    $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($chosen)
+  }
+} catch {
+  Fail 1 "recognize-failed" (Error-Detail $_)
+}
+
+$asked = ""
+if ($specObj.tags) { $asked = (@($specObj.tags) -join ",") }
+if (-not $chosen) { Fail 2 "unsupported-language" $asked }
+if (-not $engine) { Fail 2 "unsupported-language" ([string]$chosen.LanguageTag) }
+
+$file = $null
+$stream = $null
+try {
+  $file = Await-WinRt ([Windows.Storage.StorageFile]::GetFileFromPathAsync($Image)) ([Windows.Storage.StorageFile])
+  $stream = Await-WinRt ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
   $decoder = Await-WinRt ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
   $bitmap = Await-WinRt ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
   $bgra = [Windows.Graphics.Imaging.BitmapPixelFormat]::Bgra8
@@ -123,7 +156,7 @@ try {
   }
   Write-Payload ('{"ok":true,"width":' + $width + ',"height":' + $height + ',"lines":[' + ($lineJson -join ",") + "]}")
 } catch {
-  Fail 1 "recognize-failed"
+  Fail 1 "recognize-failed" (Error-Detail $_)
 } finally {
   if ($stream) { $stream.Dispose() }
 }

@@ -42,7 +42,7 @@ export function keepOcrWord(text: string, confidence?: number): boolean {
 
 /** PowerShell 5.1 writes UTF-16LE into a pipe unless the host forces UTF-8. */
 export function decodeNativeStdout(raw: string): string {
-  const text = raw.includes("\u0000") ? utf16LeCodeUnits(raw) : raw;
+  const text = raw.includes("\u0000") ? decodeUtf16Le(raw) : raw;
   return text.replace(/^\uFEFF/, "");
 }
 
@@ -212,13 +212,10 @@ function asList<T>(value: T | T[] | undefined | null): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
-function utf16LeCodeUnits(raw: string): string {
-  let text = "";
-  for (let index = 0; index < raw.length; index += 2) {
-    const code = raw.charCodeAt(index);
-    if (code !== 0) {
-      text += raw.charAt(index);
-    }
+function decodeUtf16Le(raw: string): string {
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index++) {
+    bytes[index] = raw.charCodeAt(index) & 0xff;
   }
-  return text;
+  return new TextDecoder("utf-16le").decode(bytes);
 }
