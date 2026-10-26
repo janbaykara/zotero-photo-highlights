@@ -1749,10 +1749,10 @@ function EngineChoice(props: {
   }, [open]);
   const options: OcrEngineChoice[] = ["auto", ...OCR_ENGINES];
   return (
-    <div class="flex flex-col gap-1" ref={root}>
+    <div class="flex flex-col items-start gap-0.5 self-start" ref={root}>
       <button
         type="button"
-        class="flex w-full items-center justify-between gap-2 px-2 py-1 text-left text-xs"
+        class="flex items-center gap-1 px-1.5 py-0.5 text-left text-[0.6875rem] leading-tight text-secondary"
         aria-label={getString("wizard-ocr-engine")}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -1763,8 +1763,8 @@ function EngineChoice(props: {
         </span>
         <svg
           viewBox="0 0 12 12"
-          width="12"
-          height="12"
+          width="10"
+          height="10"
           aria-hidden="true"
           class="shrink-0"
         >
@@ -1781,7 +1781,7 @@ function EngineChoice(props: {
         <ul
           role="listbox"
           aria-label={getString("wizard-ocr-engine")}
-          class="flex flex-col rounded-md border border-border bg-background py-1"
+          class="flex w-full flex-col rounded-md border border-border bg-background py-0.5"
         >
           {options.map((choice) => {
             const selected = choice === props.choice;
@@ -1791,7 +1791,7 @@ function EngineChoice(props: {
                   type="button"
                   role="option"
                   aria-selected={selected}
-                  class={`w-full px-2 py-1 text-left text-xs ${
+                  class={`w-full px-1.5 py-0.5 text-left text-[0.6875rem] leading-tight ${
                     selected ? "bg-background-toolbar" : "bg-transparent"
                   }`}
                   style="appearance:none;-moz-appearance:none"
@@ -2101,11 +2101,6 @@ function MarkStep(props: {
           <h2 class="text-xs font-semibold text-secondary">
             {getString("wizard-mark-ocr-heading")}
           </h2>
-          <EngineChoice
-            choice={photo.ocrChoice}
-            autoEngine={photo.ocrAutoEngine}
-            onChange={(choice) => props.onOcrChoice(photo.id, choice)}
-          />
           <button
             type="button"
             class="flex w-full items-center justify-center gap-2 px-2 py-1"
@@ -2122,6 +2117,11 @@ function MarkStep(props: {
               ? getString("wizard-mark-ocr")
               : getString("wizard-mark-rerecognize")}
           </button>
+          <EngineChoice
+            choice={photo.ocrChoice}
+            autoEngine={photo.ocrAutoEngine}
+            onChange={(choice) => props.onOcrChoice(photo.id, choice)}
+          />
           <DetectToggles
             underlines={photo.detectUnderlines}
             highlights={photo.detectHighlights}
