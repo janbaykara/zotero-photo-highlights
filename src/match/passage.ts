@@ -1,3 +1,5 @@
+import { buildPageIndex, postingsFor, type PageIndex } from "./pageIndex";
+
 /** Normalize quotes and file text before scoring. */
 
 const CURLY_SINGLE = /[\u2018\u2019\u201A\u201B]/g;
@@ -184,8 +186,11 @@ export type PassageHit = {
   matched: string;
 };
 
+/** How many rare quote words are probed. Each one is followed through every posting. */
+const MAX_SEED_PROBES = 4;
+
 /**
- * Best windows of `text` for `quote`. Both strings should already be normalized.
+ * Best windows of `text` for `quote`.
  * Anchors on longer words so a book page is not scored at every character.
  */
 export function findPassageHits(
@@ -198,34 +203,12 @@ export function findPassageHits(
   if (needle.length < 8 || !hay) {
     return [];
   }
-  const exact = exactPassageHits(needle, hay, limit);
-  if (exact.length) {
-    return exact;
-  }
-
-  const quoteWords = wordsOf(needle);
-  const textWords = wordsOf(hay);
-  const anchors = quoteWords.filter((word) => word.text.length >= 5);
-  const seeds = anchors.length
-    ? anchors
-    : quoteWords.filter((w) => w.text.length >= 4);
-  const seen = new Map<number, PassageHit>();
-
-  for (const seed of seeds) {
-    for (const word of textWords) {
-      if (wordSimilarity(seed.text, word.text) < 0.75) {
-        continue;
-      }
-      considerPassageWindow(seen, hay, needle, word.start - seed.start);
-    }
-  }
-
-  return [...seen.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+  return locateOnIndex(buildPageIndex([hay]), needle, limit)[0] || [];
 }
 
 /**
- * Same hits as `findPassageHits`, but lets the UI paint between batches of
- * comparisons so a long book does not freeze the wizard.
+ * Same hits as `findPassageHits`. Yields once so the wizard can paint, then
+ * finishes. The page index makes the search itself short.
  */
 export async function findPassageHitsAsync(
   quote: string,
@@ -235,39 +218,83 @@ export async function findPassageHitsAsync(
 ): Promise<PassageHit[]> {
   const needle = normalizePassage(quote);
   const hay = normalizePassage(text);
-  if (needle.length < 8 || !hay) {
-    return [];
+  const hits = findPassageHits(quote, text, limit);
+  if (onCompare && needle.length >= 8 && hay && !hay.includes(needle)) {
+    onCompare(1, 1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  const exact = exactPassageHits(needle, hay, limit);
-  if (exact.length) {
-    return exact;
+  return hits;
+}
+
+/**
+ * Hits for each already-normalized page. Exact quotes return immediately.
+ * Other quotes score only the windows of a few rare words.
+ */
+export function locateOnIndex(
+  index: PageIndex,
+  needle: string,
+  limit = 5,
+): PassageHit[][] {
+  const hits = index.pages.map(() => [] as PassageHit[]);
+  if (needle.length < 8) {
+    return hits;
   }
+  const pending: number[] = [];
+  index.pages.forEach((page, sliceIndex) => {
+    const exact = exactPassageHits(needle, page, limit);
+    if (exact.length) {
+      hits[sliceIndex] = exact;
+    } else if (page) {
+      pending.push(sliceIndex);
+    }
+  });
+  if (!pending.length) {
+    return hits;
+  }
+
   const quoteWords = wordsOf(needle);
-  const textWords = wordsOf(hay);
   const anchors = quoteWords.filter((word) => word.text.length >= 5);
   const seeds = anchors.length
     ? anchors
     : quoteWords.filter((word) => word.text.length >= 4);
-  const seen = new Map<number, PassageHit>();
-  const total = seeds.length * textWords.length;
-  let steps = 0;
-  for (const seed of seeds) {
-    for (const word of textWords) {
-      steps += 1;
-      if (steps % 40 === 0) {
-        onCompare?.(steps, total);
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-      if (wordSimilarity(seed.text, word.text) < 0.75) {
+  const probes = seeds
+    .map((seed) => ({
+      start: seed.start,
+      postings: postingsFor(
+        index,
+        seed.text,
+        (candidate) => wordSimilarity(seed.text, candidate) >= 0.75,
+      ),
+    }))
+    .filter((seed) => seed.postings.length)
+    .sort((a, b) => a.postings.length - b.postings.length)
+    .slice(0, MAX_SEED_PROBES);
+  const pendingSet = new Set(pending);
+  const seen = new Map<number, Map<number, PassageHit>>();
+  for (const seed of probes) {
+    for (const posting of seed.postings) {
+      if (!pendingSet.has(posting.sliceIndex)) {
         continue;
       }
-      considerPassageWindow(seen, hay, needle, word.start - seed.start);
+      let pageSeen = seen.get(posting.sliceIndex);
+      if (!pageSeen) {
+        pageSeen = new Map();
+        seen.set(posting.sliceIndex, pageSeen);
+      }
+      considerPassageWindow(
+        pageSeen,
+        index.pages[posting.sliceIndex],
+        needle,
+        posting.start - seed.start,
+      );
     }
   }
-  if (steps > 0 && steps % 40 !== 0) {
-    onCompare?.(steps, total);
+  for (const [sliceIndex, pageSeen] of seen) {
+    hits[sliceIndex] = [...pageSeen.values()]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
   }
-  return [...seen.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+  return hits;
 }
 
 function exactPassageHits(

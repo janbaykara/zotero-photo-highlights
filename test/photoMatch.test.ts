@@ -39,9 +39,26 @@ describe("photo matching", function () {
       const hits = findPassageHits(quote, page);
       assert.isAtLeast(hits[0].score, 0.84);
       assert.deepEqual(await findPassageHitsAsync(quote, page), hits);
+      const reversed = findPassageHits(
+        "The rnodern method is simple",
+        "12\nThe modern method is simple.\n13",
+      );
+      assert.isAtLeast(reversed[0].score, 0.84);
     });
 
-    it("reports how many comparisons a search has made", async function () {
+    it("finds both copies of an OCR-like sentence in a long page", function () {
+      const filler = Array.from(
+        { length: 400 },
+        (_, index) => `word${index}`,
+      ).join(" ");
+      const page = `${filler} the rnodern method is simple ${filler} the rnodern method is simple`;
+      const hits = findPassageHits("The modern method is simple", page);
+      assert.equal(hits.length, 2);
+      assert.isAtLeast(hits[0].score, 0.84);
+      assert.isAtLeast(hits[1].score, 0.84);
+    });
+
+    it("reports that a search has finished", async function () {
       const quote = "The modern method is simple";
       const page = Array.from({ length: 45 }, (_, index) =>
         index === 20 ? "rnodern method is simple" : `note${index}`,

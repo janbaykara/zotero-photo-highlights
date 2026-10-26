@@ -1,8 +1,9 @@
 import { EpubCFI } from "epubjs";
+import { buildPageIndex, type PageIndex } from "../match/pageIndex";
 import {
   bandScores,
   contextAgreement,
-  findPassageHitsAsync,
+  locateOnIndex,
   normalizePassage,
   normalizeWithMap,
   quotesOverlap,
@@ -25,7 +26,12 @@ import {
   epubSortIndex,
 } from "../match/epubCfi";
 import { readPdfPageLabels } from "../utils/pdfPageLabels";
-import { loadPdfjs, type PdfjsTextItem } from "../utils/pdfjs";
+import {
+  loadPdfjs,
+  type PdfjsDocument,
+  type PdfjsModule,
+  type PdfjsTextItem,
+} from "../utils/pdfjs";
 
 export type LocatedPlace = {
   attachmentId: number;
@@ -60,6 +66,8 @@ type Slice = {
 
 const cache = new Map<number, Slice[]>();
 const loading = new Map<number, Promise<Slice[]>>();
+const indexes = new Map<string, PageIndex>();
+const READ_SLICE_MS = 12;
 
 /** Share of one photo's bar spent reading the file, before the search. */
 const READ_END = 0.72;
@@ -83,10 +91,43 @@ export type MatchProgressSink = (progress: MatchProgress) => void;
 export function clearAttachmentTextCache(): void {
   cache.clear();
   loading.clear();
+  indexes.clear();
 }
 
 function breathe(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** Yield after a stretch of reading so the wizard can paint, not after every page. */
+async function yieldIfDue(clock: { at: number }): Promise<void> {
+  const now = Date.now();
+  if (now - clock.at < READ_SLICE_MS) {
+    return;
+  }
+  await breathe();
+  clock.at = Date.now();
+}
+
+function indexKey(slices: Slice[]): string {
+  const parts = [String(slices.length)];
+  for (const slice of slices) {
+    const text = slice.text;
+    parts.push(
+      `${slice.attachmentId}:${slice.pageIndex}:${text.length}:${text.slice(0, 24)}:${text.slice(-24)}`,
+    );
+  }
+  return parts.join("|");
+}
+
+function indexFor(slices: Slice[]): PageIndex {
+  const key = indexKey(slices);
+  const cached = indexes.get(key);
+  if (cached) {
+    return cached;
+  }
+  const built = buildPageIndex(slices.map((slice) => slice.text));
+  indexes.set(key, built);
+  return built;
 }
 
 export async function attachmentSlices(
@@ -200,17 +241,17 @@ async function pdfSlices(
     return [];
   }
   sink?.({ activity: "wizard-matching-opening", ratio: 0 });
-  const doc = await pdfjs.getDocument({ data: bytes, disableWorker: true })
-    .promise;
+  const doc = await openPdfDocument(pdfjs, bytes);
   const labels = (await readPdfPageLabels(bytes, doc.numPages)) || [];
   const slices: Slice[] = [];
+  const clock = { at: Date.now() };
   for (let page = 1; page <= doc.numPages; page++) {
     sink?.({
       activity: "wizard-matching-reading-pdf",
       args: { page, pages: doc.numPages },
       ratio: page / doc.numPages,
     });
-    await breathe();
+    await yieldIfDue(clock);
     const pdfPage = await doc.getPage(page);
     const content = await pdfPage.getTextContent();
     const items = (content.items || [])
@@ -241,6 +282,35 @@ async function pdfSlices(
   }
   await doc.destroy?.();
   return slices;
+}
+
+/**
+ * pdf.js can parse off the main thread when its worker script loads.
+ * A packed Zotero build sometimes rejects that worker; the same bytes then
+ * open on the main thread.
+ */
+async function openPdfDocument(
+  pdfjs: PdfjsModule,
+  bytes: Uint8Array,
+): Promise<PdfjsDocument> {
+  let doc: PdfjsDocument | null = null;
+  try {
+    doc = await pdfjs.getDocument({
+      data: bytes.slice(),
+      disableWorker: false,
+    }).promise;
+    if (doc.numPages > 0) {
+      await doc.getPage(1);
+    }
+    return doc;
+  } catch {
+    try {
+      await doc?.destroy?.();
+    } catch {
+      // The worker document is unusable; the main-thread open replaces it.
+    }
+    return pdfjs.getDocument({ data: bytes, disableWorker: true }).promise;
+  }
 }
 
 function useMainWindowRealm(): void {
@@ -280,6 +350,7 @@ async function epubSlices(
     }
     const slices: Slice[] = [];
     const itemrefs = named(opf, "itemref");
+    const clock = { at: Date.now() };
     for (let index = 0; index < itemrefs.length; index++) {
       const itemref = itemrefs[index];
       sink?.({
@@ -287,7 +358,7 @@ async function epubSlices(
         args: { section: index + 1, sections: itemrefs.length },
         ratio: (index + 1) / itemrefs.length,
       });
-      await breathe();
+      await yieldIfDue(clock);
       const idref = itemref.getAttribute("idref") || "";
       const href = manifest.get(idref);
       const spineIndex = index;
@@ -520,25 +591,32 @@ export async function matchQuote(
   const candidates: { hit: PassageHit; slice: Slice; score: number }[] = [];
   const searchFrom = sawReading ? READ_END : 0;
   const span = slices.length ? (SEARCH_END - searchFrom) / slices.length : 0;
-  for (let index = 0; index < slices.length; index++) {
+  if (slices.length) {
+    sink?.({
+      activity: "wizard-matching-searching",
+      args: { label: slices[0].label, index: 1, count: slices.length },
+      ratio: searchFrom,
+    });
     await breathe();
+  }
+  const grouped = locateOnIndex(indexFor(slices), needle, 5);
+  const clock = { at: Date.now() };
+  for (let index = 0; index < slices.length; index++) {
+    const hits = grouped[index];
+    if (!hits?.length) {
+      continue;
+    }
+    await yieldIfDue(clock);
     const slice = slices[index];
-    const start = searchFrom + span * index;
-    const reportSlice = (done: number, total: number) => {
-      const fraction = total > 0 ? done / total : 1;
-      sink?.({
-        activity: "wizard-matching-searching",
-        args: {
-          label: slice.label,
-          index: index + 1,
-          count: slices.length,
-        },
-        ratio: start + span * fraction,
-      });
-    };
-    reportSlice(0, 1);
-    const hits = await findPassageHitsAsync(needle, slice.text, 5, reportSlice);
-    reportSlice(1, 1);
+    sink?.({
+      activity: "wizard-matching-searching",
+      args: {
+        label: slice.label,
+        index: index + 1,
+        count: slices.length,
+      },
+      ratio: searchFrom + span * (index + 1),
+    });
     for (const hit of hits) {
       candidates.push({
         hit,

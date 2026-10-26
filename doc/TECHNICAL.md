@@ -32,7 +32,7 @@ Other languages are downloaded from `tesseract-ocr/tessdata_best` into `<profile
 
 ## Matching
 
-Pure functions in `src/match/` normalize case, quotes, dashes, and line-break hyphenation, then score windows with length-normalized edit distance.
+Pure functions in `src/match/` normalize case, quotes, dashes, and line-break hyphenation, then score windows with length-normalized edit distance. The book text is indexed once. Later highlights look up the rarest words in the quote and score only those spots. An exact quote is still found immediately. A word the page spells differently, such as an OCR miss, is found from shared three-letter pieces and then scored with the same edit distance.
 
 - Auto-locate when the best score is at least 0.84 and the runner-up is at least 0.08 worse.
 - Ask when two or more candidates are at least 0.72.
@@ -40,7 +40,7 @@ Pure functions in `src/match/` normalize case, quotes, dashes, and line-break hy
 
 The words OCR read just before and after the selection are compared with the book text beside each hit. A repeated sentence is located when one copy’s surroundings agree and the others do not. The highlight itself stays the selected words. With no surrounding words, the quote score is unchanged.
 
-Clicking Next on a marked photo starts a search for each of its passages immediately. Page text is read once and shared by later passages. Comparisons yield back to the wizard so the next photo can be marked while the search runs. Review waits only for a passage whose search is still going. That screen is titled Matching up highlights. The book title is at the top. Under it, the current passage is shown with its place among the highlights, and a progress bar that advances once per passage. A smaller line under that says what the search is doing for that passage (opening the file, reading a page or section, searching that page, checking for a duplicate, or saving), without its own bar. It is skipped when every search has already finished. The search runs again if the quote, the words around it, or the book changed. A passage that locates on its own is saved then and is not searched again. Saving still uses the colour and comment from that moment.
+Clicking Next on a marked photo starts a search for each of its passages immediately. Page text is read once and shared by later passages, including the word index. Reading yields back to the wizard every few milliseconds so the next photo can be marked while the file is opened. A later highlight is a lookup, so that search itself is short. Review waits only for a passage whose search is still going. That screen is titled Matching up highlights. The book title is at the top. Under it, the current passage is shown with its place among the highlights, and a progress bar that advances once per passage. A smaller line under that says what the search is doing for that passage (opening the file, reading a page or section, searching that page, checking for a duplicate, or saving), without its own bar. It is skipped when every search has already finished. The search runs again if the quote, the words around it, or the book changed. A passage that locates on its own is saved then and is not searched again. Saving still uses the colour and comment from that moment.
 
 The search corpus is the full text of every PDF and EPUB attachment, cached for the session. It does not use `.zotero-ft-cache`.
 
