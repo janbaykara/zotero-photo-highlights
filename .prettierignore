@@ -7,3 +7,4 @@ yarn.lock
 pnpm-lock.yaml
 src/utils/cssHash.generated.ts
 addon/content/ocr
+addon/content/opencv

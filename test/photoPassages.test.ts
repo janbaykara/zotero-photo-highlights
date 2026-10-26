@@ -2,6 +2,8 @@ import { assert } from "chai";
 import {
   addEmptyPassage,
   applyPassageDrag,
+  dropDetectedPassages,
+  mergeDetectedPassages,
   pendingPassages,
 } from "../src/photo/passages";
 import type { OcrWord, Passage, PhotoDraft } from "../src/photo/types";
@@ -120,5 +122,60 @@ describe("passage edits", function () {
       pendingPassages(photo).map((passage) => passage.id),
       ["open"],
     );
+  });
+
+  it("drops a detected passage and keeps one you dragged", function () {
+    const detected: Passage = {
+      id: "p1",
+      quote: "one two",
+      selected: [0, 1],
+      comment: "",
+      color: "#ffd400",
+      detected: "underline",
+    };
+    const typed: Passage = {
+      id: "p2",
+      quote: "four",
+      selected: [3],
+      comment: "",
+      color: "#ff6666",
+    };
+    assert.deepEqual(
+      dropDetectedPassages([detected, typed]).map((passage) => passage.id),
+      ["p2"],
+    );
+    const dragged = applyPassageDrag([detected], words, 0, 0, "p1", false);
+    assert.equal(dragged[0]?.detected, false);
+    assert.deepEqual(
+      dropDetectedPassages(dragged).map((passage) => passage.selected),
+      [[0]],
+    );
+  });
+
+  it("scans again without taking words from a passage you typed", function () {
+    const next = mergeDetectedPassages(
+      [
+        {
+          id: "hand",
+          quote: "one",
+          selected: [0],
+          comment: "",
+          color: "#ff6666",
+        },
+      ],
+      words,
+      [
+        { words: [0, 1], color: "#ffd400", kind: "underline" },
+        { words: [2, 3], color: "#2ea8e5", kind: "highlight" },
+      ],
+    );
+    assert.deepEqual(
+      next.map((passage) => passage.selected),
+      [[0], [1], [2, 3]],
+    );
+    assert.equal(next[1]?.detected, "underline");
+    assert.equal(next[1]?.quote, "two");
+    assert.equal(next[2]?.detected, "highlight");
+    assert.equal(next[2]?.quote, "three four");
   });
 });

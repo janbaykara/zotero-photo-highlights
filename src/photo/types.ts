@@ -21,6 +21,8 @@ export type Passage = {
   color: string;
   /** Already saved. Hidden on the mark step and not searched again. */
   committed?: boolean;
+  /** Filled by detection. Cleared when you edit the passage. */
+  detected?: "underline" | "highlight" | false;
 };
 
 export type PhotoDraft = {
@@ -44,6 +46,10 @@ export type PhotoDraft = {
   imageWidth: number;
   imageHeight: number;
   passages: Passage[];
+  /** Scan this photo for pen underlines. On unless the checkbox is cleared. */
+  detectUnderlines: boolean;
+  /** Scan this photo for highlighter. Off unless the checkbox is set. */
+  detectHighlights: boolean;
   bookId: number | null;
   bookTitle: string;
   kept: boolean;

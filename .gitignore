@@ -16,6 +16,9 @@ tsconfig.tsbuildinfo
 build
 logs
 
+# Copied from @techstark/opencv-js by scripts/copy-opencv.mjs
+addon/content/opencv/
+
 # Docs site (Astro)
 website/dist
 website/.astro

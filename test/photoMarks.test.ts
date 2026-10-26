@@ -1,5 +1,7 @@
+import { createRequire } from "node:module";
 import { assert } from "chai";
 import { detectMarkedPassages, type RgbaImage } from "../src/photo/marks";
+import type { OpenCv } from "../src/photo/opencv";
 import type { OcrWord } from "../src/photo/types";
 
 type RGB = [number, number, number];
@@ -173,6 +175,46 @@ describe("marked passages", function () {
     );
   });
 
+  it("joins a dashed stroke whose pieces are shorter than a word", function () {
+    const image = makeImage(220, 100, WHITE);
+    const words = lineWords(0, 16, 24, 3);
+    for (const word of words) {
+      glyphs(image, word);
+      for (let x = word.x0; x < word.x1; x += 14) {
+        fillRect(image, x, word.y1, Math.min(8, word.x1 - x), 2, PENCIL);
+      }
+    }
+    assert.deepEqual(
+      detectMarkedPassages(image, words).map((span) => span.words),
+      [[0, 1, 2]],
+    );
+  });
+
+  it("selects a pencil in a bright patch when the rest of the line is in shadow", function () {
+    const image = makeImage(360, 120, [150, 150, 150]);
+    const words = lineWords(0, 16, 40, 3);
+    fillRect(image, 0, 30, 130, 50, WHITE);
+    for (const word of words) {
+      glyphs(image, word);
+    }
+    for (const word of words.slice(0, 2)) {
+      fillRect(
+        image,
+        word.x0,
+        word.y0,
+        word.x1 - word.x0,
+        word.y1 - word.y0,
+        WHITE,
+      );
+      glyphs(image, word);
+      fillRect(image, word.x0, word.y1, word.x1 - word.x0, 2, [200, 200, 200]);
+    }
+    assert.deepEqual(
+      detectMarkedPassages(image, words).map((span) => span.words),
+      [[0, 1]],
+    );
+  });
+
   it("ignores a short speck under a word", function () {
     const image = makeImage(220, 100, WHITE);
     const words = lineWords(0, 16, 24, 3);
@@ -186,6 +228,141 @@ describe("marked passages", function () {
     }
     fillRect(image, word.x0, word.y1, 4, 2, INK);
     assert.deepEqual(detectMarkedPassages(image, words), []);
+  });
+
+  describe("highlighter with OpenCV", function () {
+    let cv: OpenCv;
+
+    before(async function () {
+      this.timeout(20000);
+      const nodeRequire = createRequire(`${process.cwd()}/package.json`);
+      const loaded = nodeRequire("@techstark/opencv-js") as Promise<OpenCv>;
+      cv = typeof loaded.then === "function" ? await loaded : loaded;
+    });
+
+    it("splits yellow and blue washes into two passages", function () {
+      const image = makeImage(280, 100, WHITE);
+      const words = lineWords(0, 12, 20, 4);
+      words.forEach((word, index) => {
+        fillRect(
+          image,
+          word.x0,
+          word.y0,
+          word.x1 - word.x0,
+          word.y1 - word.y0,
+          index < 2 ? YELLOW : BLUE,
+        );
+        glyphs(image, word);
+      });
+      const found = detectMarkedPassages(image, words, cv);
+      assert.deepEqual(
+        found.map((span) => span.words),
+        [
+          [0, 1],
+          [2, 3],
+        ],
+      );
+      assert.deepEqual(
+        found.map((span) => span.color),
+        ["#ffd400", "#2ea8e5"],
+      );
+    });
+
+    it("leaves cream paper and a fully yellow page unmarked", function () {
+      const cream = makeImage(280, 100, CREAM);
+      const creamWords = lineWords(0, 12, 20, 4);
+      for (const word of creamWords) {
+        glyphs(cream, word);
+      }
+      assert.deepEqual(detectMarkedPassages(cream, creamWords, cv), []);
+
+      const yellow = makeImage(280, 100, YELLOW);
+      const yellowWords = lineWords(0, 12, 20, 3);
+      for (const word of yellowWords) {
+        glyphs(yellow, word);
+      }
+      assert.deepEqual(detectMarkedPassages(yellow, yellowWords, cv), []);
+    });
+
+    it("selects a yellow wash on cream paper", function () {
+      const image = makeImage(280, 100, CREAM);
+      const words = lineWords(0, 12, 20, 3);
+      words.forEach((word, index) => {
+        if (index > 0) {
+          fillRect(
+            image,
+            word.x0,
+            word.y0,
+            word.x1 - word.x0,
+            word.y1 - word.y0,
+            YELLOW,
+          );
+        }
+        glyphs(image, word);
+      });
+      const found = detectMarkedPassages(image, words, cv);
+      assert.deepEqual(
+        found.map((span) => span.words),
+        [[1, 2]],
+      );
+      assert.equal(found[0]?.color, "#ffd400");
+    });
+
+    it("keeps an underline and a wash on the same line", function () {
+      const image = makeImage(280, 100, WHITE);
+      const words = lineWords(0, 12, 20, 4);
+      words.forEach((word, index) => {
+        glyphs(image, word);
+        if (index < 2) {
+          fillRect(image, word.x0, word.y1, word.x1 - word.x0, 2, INK);
+        } else {
+          fillRect(
+            image,
+            word.x0,
+            word.y0,
+            word.x1 - word.x0,
+            word.y1 - word.y0,
+            BLUE,
+          );
+          glyphs(image, word);
+        }
+      });
+      const found = detectMarkedPassages(image, words, cv);
+      assert.deepEqual(
+        found.map((span) => span.words),
+        [
+          [0, 1],
+          [2, 3],
+        ],
+      );
+      assert.deepEqual(
+        found.map((span) => span.color),
+        ["#ffd400", "#2ea8e5"],
+      );
+    });
+
+    it("keeps the wash when the same words are also underlined", function () {
+      const image = makeImage(220, 100, WHITE);
+      const words = lineWords(0, 16, 24, 3);
+      for (const word of words) {
+        fillRect(
+          image,
+          word.x0,
+          word.y0,
+          word.x1 - word.x0,
+          word.y1 - word.y0,
+          BLUE,
+        );
+        glyphs(image, word);
+        fillRect(image, word.x0, word.y1, word.x1 - word.x0, 2, INK);
+      }
+      const found = detectMarkedPassages(image, words, cv);
+      assert.deepEqual(
+        found.map((span) => span.words),
+        [[0, 1, 2]],
+      );
+      assert.equal(found[0]?.color, "#2ea8e5");
+    });
   });
 });
 

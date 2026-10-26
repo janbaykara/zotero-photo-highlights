@@ -28,11 +28,13 @@ import {
   scaleLongestSide,
 } from "../photo/files";
 import { detectMarkedPassages } from "../photo/marks";
+import { loadOpenCv } from "../photo/opencv";
 import {
   addEmptyPassage,
   applyPassageDrag,
+  dropDetectedPassages,
+  mergeDetectedPassages,
   newPassageId,
-  passagesFromDetection,
   passageOwning,
   pendingPassages,
   samePassages,
@@ -124,6 +126,10 @@ export function PhotoWizard(props: {
 
   const photosRef = useRef(photos);
   photosRef.current = photos;
+  const scanRef = useRef<
+    Record<string, { underlines: boolean; highlights: boolean }>
+  >({});
+  const scanGen = useRef<Record<string, number>>({});
   const locateJobs = useRef(
     new Map<
       string,
@@ -199,6 +205,8 @@ export function PhotoWizard(props: {
         imageWidth: scaled.width,
         imageHeight: scaled.height,
         passages: [],
+        detectUnderlines: true,
+        detectHighlights: false,
         bookId: null,
         bookTitle: "",
         kept: false,
@@ -214,6 +222,7 @@ export function PhotoWizard(props: {
     }
     setPhotos((current) => [...current, ...drafts]);
     for (const draft of drafts) {
+      scanRef.current[draft.id] = { underlines: true, highlights: false };
       void runOcr(draft, lang, draft.orientToken);
     }
   };
@@ -253,23 +262,33 @@ export function PhotoWizard(props: {
         language,
         win,
       );
-      let passages: Passage[] = [];
-      try {
-        const pixels = await readImagePixels(
-          win,
-          draft.imageUrl,
-          draft.imageWidth,
-          draft.imageHeight,
-        );
-        if (pixels) {
-          passages = passagesFromDetection(
-            recognized.words,
-            detectMarkedPassages(pixels, recognized.words),
+      let detected: ReturnType<typeof detectMarkedPassages> = [];
+      const flags = () =>
+        scanRef.current[draft.id] ?? { underlines: true, highlights: false };
+      if (flags().underlines || flags().highlights) {
+        try {
+          const pixels = await readImagePixels(
+            win,
+            draft.imageUrl,
+            draft.imageWidth,
+            draft.imageHeight,
           );
+          const want = flags();
+          if (pixels && (want.underlines || want.highlights)) {
+            const cv = want.highlights ? await loadOpenCv(win) : null;
+            const now = flags();
+            if (now.underlines || (now.highlights && cv)) {
+              detected = detectMarkedPassages(pixels, recognized.words, cv, {
+                underlines: now.underlines,
+                highlights: now.highlights && Boolean(cv),
+              });
+            }
+          }
+        } catch (error) {
+          ztoolkit.log("Could not detect marks", error);
         }
-      } catch (error) {
-        ztoolkit.log("Could not detect marks", error);
       }
+      const now = flags();
       setPhotos((current) =>
         current.map((photo) =>
           photo.id === draft.id && photo.orientToken === token
@@ -278,7 +297,16 @@ export function PhotoWizard(props: {
                 ocr: "done",
                 ocrEngine: recognized.engine,
                 words: recognized.words,
-                passages,
+                detectUnderlines: now.underlines,
+                detectHighlights: now.highlights,
+                passages:
+                  now.underlines || now.highlights
+                    ? mergeDetectedPassages(
+                        photo.passages,
+                        recognized.words,
+                        detected,
+                      )
+                    : dropDetectedPassages(photo.passages),
               }
             : photo,
         ),
@@ -374,6 +402,8 @@ export function PhotoWizard(props: {
     const token = previous.token + 1;
     orientRef.current[id] = { turns: previous.turns, token };
     setPhotos((current) => current.filter((item) => item.id !== id));
+    delete scanRef.current[id];
+    delete scanGen.current[id];
     const prior = turnChain.current[id] ?? Promise.resolve();
     turnChain.current[id] = prior
       .catch(() => undefined)
@@ -479,6 +509,95 @@ export function PhotoWizard(props: {
         photo.id === id ? { ...photo, ...patch } : photo,
       ),
     );
+  };
+
+  const readFlags = (id: string) =>
+    scanRef.current[id] ?? { underlines: true, highlights: false };
+
+  const detectOnPhoto = async (photo: PhotoDraft, words: OcrWord[]) => {
+    const win = Zotero.getMainWindow();
+    if (!win) {
+      return null;
+    }
+    const flags = readFlags(photo.id);
+    if (!flags.underlines && !flags.highlights) {
+      return [];
+    }
+    const pixels = await readImagePixels(
+      win,
+      photo.imageUrl,
+      photo.imageWidth,
+      photo.imageHeight,
+    );
+    const want = readFlags(photo.id);
+    if (!pixels || (!want.underlines && !want.highlights)) {
+      return [];
+    }
+    const cv = want.highlights ? await loadOpenCv(win) : null;
+    const now = readFlags(photo.id);
+    if (!now.underlines && !(now.highlights && cv)) {
+      return [];
+    }
+    return detectMarkedPassages(pixels, words, cv, {
+      underlines: now.underlines,
+      highlights: now.highlights && Boolean(cv),
+    });
+  };
+
+  const refillDetected = async (photo: PhotoDraft, generation: number) => {
+    const token = photo.orientToken;
+    try {
+      const detected = await detectOnPhoto(photo, photo.words);
+      if (!detected || scanGen.current[photo.id] !== generation) {
+        return;
+      }
+      const latest = photosRef.current.find((item) => item.id === photo.id);
+      if (!latest || latest.orientToken !== token || latest.ocr !== "done") {
+        return;
+      }
+      if (scanGen.current[photo.id] !== generation) {
+        return;
+      }
+      updatePhoto(photo.id, {
+        passages: mergeDetectedPassages(
+          latest.passages,
+          latest.words,
+          detected,
+        ),
+      });
+    } catch (error) {
+      ztoolkit.log("Could not detect marks", error);
+    }
+  };
+
+  const setDetect = (
+    id: string,
+    kind: "underlines" | "highlights",
+    enabled: boolean,
+  ) => {
+    const photo = photosRef.current.find((item) => item.id === id);
+    if (!photo) {
+      return;
+    }
+    const current = readFlags(id);
+    if (current[kind] === enabled) {
+      return;
+    }
+    const next = { ...current, [kind]: enabled };
+    scanRef.current[id] = next;
+    const generation = (scanGen.current[id] ?? 0) + 1;
+    scanGen.current[id] = generation;
+    const markKind = kind === "underlines" ? "underline" : "highlight";
+    updatePhoto(id, {
+      detectUnderlines: next.underlines,
+      detectHighlights: next.highlights,
+      ...(enabled
+        ? {}
+        : { passages: dropDetectedPassages(photo.passages, markKind) }),
+    });
+    if (photo.ocr === "done") {
+      void refillDetected(photo, generation);
+    }
   };
 
   const updatePassage = (
@@ -1039,6 +1158,7 @@ export function PhotoWizard(props: {
             dragging={draggingFiles}
             onRotate={rotatePhoto}
             onRemove={removePhoto}
+            onDetect={setDetect}
             onChoose={async (win) => {
               try {
                 await addPaths(
@@ -1064,6 +1184,7 @@ export function PhotoWizard(props: {
               onActivePassage={setMarkPassageId}
               onRotate={rotatePhoto}
               onRerunOcr={rerunOcr}
+              onDetect={setDetect}
               onSkip={skipCurrentPhoto}
             />
           </div>
@@ -1153,7 +1274,10 @@ export function PhotoWizard(props: {
             onQuote={(quote) => {
               const decision = decisions[decisionIndex];
               if (decision) {
-                updatePassage(decision.photoId, decision.passageId, { quote });
+                updatePassage(decision.photoId, decision.passageId, {
+                  quote,
+                  detected: false,
+                });
               }
             }}
             onComment={(comment) => {
@@ -1161,6 +1285,7 @@ export function PhotoWizard(props: {
               if (decision) {
                 updatePassage(decision.photoId, decision.passageId, {
                   comment,
+                  detected: false,
                 });
               }
             }}
@@ -1392,6 +1517,11 @@ function AddStep(props: {
   onChoose: (win: Window) => Promise<void>;
   onRotate: (id: string, delta: number) => void;
   onRemove: (id: string) => void;
+  onDetect: (
+    id: string,
+    kind: "underlines" | "highlights",
+    enabled: boolean,
+  ) => void;
 }) {
   const empty = props.photos.length === 0;
   return (
@@ -1449,6 +1579,16 @@ function AddStep(props: {
                 >
                   {ocrLabel(photo.ocr, photo.ocrEngine)}
                 </div>
+                <DetectToggles
+                  underlines={photo.detectUnderlines}
+                  highlights={photo.detectHighlights}
+                  onUnderlines={(enabled) =>
+                    props.onDetect(photo.id, "underlines", enabled)
+                  }
+                  onHighlights={(enabled) =>
+                    props.onDetect(photo.id, "highlights", enabled)
+                  }
+                />
               </div>
               <div class="flex shrink-0 gap-1">
                 <button
@@ -1603,6 +1743,11 @@ function MarkStep(props: {
   onActivePassage: (id: string | null) => void;
   onRotate: (id: string, delta: number) => void;
   onRerunOcr: (id: string) => void;
+  onDetect: (
+    id: string,
+    kind: "underlines" | "highlights",
+    enabled: boolean,
+  ) => void;
   onSkip: () => void;
 }) {
   const photo = props.photo;
@@ -1752,7 +1897,7 @@ function MarkStep(props: {
       </div>
       <aside
         class="flex h-full min-h-0 shrink-0 flex-col gap-2 overflow-hidden"
-        style="width:13rem"
+        style="width:18rem"
       >
         <div class="flex flex-none flex-col gap-1">
           <p class="text-xs text-secondary">
@@ -1763,8 +1908,17 @@ function MarkStep(props: {
           {photo.takenAt != null ? (
             <p class="text-sm font-medium">{formatPhotoWhen(photo.takenAt)}</p>
           ) : null}
-          <p class="text-xs text-secondary">{getString("wizard-mark-drag")}</p>
-          <div class="flex flex-wrap items-center gap-1">
+          <DetectToggles
+            underlines={photo.detectUnderlines}
+            highlights={photo.detectHighlights}
+            onUnderlines={(enabled) =>
+              props.onDetect(photo.id, "underlines", enabled)
+            }
+            onHighlights={(enabled) =>
+              props.onDetect(photo.id, "highlights", enabled)
+            }
+          />
+          <div class="flex items-center gap-1">
             <button
               type="button"
               class="px-2 py-1"
@@ -1783,16 +1937,18 @@ function MarkStep(props: {
             >
               <RotateIcon direction="right" />
             </button>
+          </div>
+          <div class="flex items-center gap-1">
             <button
               type="button"
-              class="px-2 py-1"
+              class="shrink-0 px-2 py-1"
               disabled={photo.ocr === "running" || photo.ocr === "pending"}
               onClick={() => props.onRerunOcr(photo.id)}
             >
               {getString("wizard-mark-rerecognize")}
             </button>
             {photo.ocr === "done" && photo.ocrEngine ? (
-              <span class="text-xs text-secondary">
+              <span class="whitespace-nowrap text-xs text-secondary">
                 {getString(ocrEngineKey(photo.ocrEngine))}
               </span>
             ) : null}
@@ -1859,6 +2015,7 @@ function MarkStep(props: {
                                     event.currentTarget as HTMLTextAreaElement
                                   ).value,
                                   selected: [],
+                                  detected: false,
                                 }
                               : item,
                           ),
@@ -1940,12 +2097,14 @@ function MarkStep(props: {
                   active?.color === color ? "2px solid currentColor" : "none",
               }}
               onClick={() => {
-                if (!active) {
+                if (!active || active.color === color) {
                   return;
                 }
                 props.updatePhoto(photo.id, {
                   passages: photo.passages.map((passage) =>
-                    passage.id === active.id ? { ...passage, color } : passage,
+                    passage.id === active.id
+                      ? { ...passage, color, detected: false }
+                      : passage,
                   ),
                 });
               }}
@@ -2527,6 +2686,47 @@ function placeCardStyle(selected: boolean): string {
     "color:inherit",
     "cursor:pointer",
   ].join(";");
+}
+
+function DetectToggles(props: {
+  underlines: boolean;
+  highlights: boolean;
+  onUnderlines: (enabled: boolean) => void;
+  onHighlights: (enabled: boolean) => void;
+}) {
+  return (
+    <div class="flex flex-col gap-1">
+      <DetectToggle
+        label="wizard-detect-underlines"
+        checked={props.underlines}
+        onChange={props.onUnderlines}
+      />
+      <DetectToggle
+        label="wizard-detect-highlights"
+        checked={props.highlights}
+        onChange={props.onHighlights}
+      />
+    </div>
+  );
+}
+
+function DetectToggle(props: {
+  label: "wizard-detect-underlines" | "wizard-detect-highlights";
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label class="flex items-center gap-2 text-xs text-secondary">
+      <input
+        type="checkbox"
+        checked={props.checked}
+        onChange={(event) =>
+          props.onChange((event.currentTarget as HTMLInputElement).checked)
+        }
+      />
+      {getString(props.label)}
+    </label>
+  );
 }
 
 function KeepPhotoToggle(props: {

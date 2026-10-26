@@ -50,6 +50,19 @@ export type OpenPreactDialogOptions = {
   ) => void;
 };
 
+/**
+ * Zotero sets `--material-sidepane` on `body`. That box is the window height,
+ * so once the document scrolls the canvas behind it is white. The root
+ * background covers the whole canvas.
+ */
+function paintDialogRoot(doc: Document): void {
+  const root = doc.documentElement;
+  if (!root) {
+    return;
+  }
+  root.style.backgroundColor = "var(--material-sidepane)";
+}
+
 function injectDialogStyles(doc: Document): void {
   const deps = getPreactDeps();
   if (doc.querySelector(`link[data-zotero-preact-stylesheet="dialog"]`)) {
@@ -176,6 +189,7 @@ export function openPreactDialog(
         handle.window = dialog.window;
         try {
           injectDialogStyles(dialog.window.document);
+          paintDialogRoot(dialog.window.document);
           handle.remount();
         } catch (error) {
           deps.log("Error mounting Preact dialog:", error);

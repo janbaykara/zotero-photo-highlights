@@ -20,7 +20,46 @@ export function passagesFromDetection(
     selected: span.words,
     comment: "",
     color: span.color,
+    detected: span.kind,
   }));
+}
+
+/** Drop passages that detection added and that you have not edited. */
+export function dropDetectedPassages(
+  passages: Passage[],
+  kind?: DetectedPassage["kind"],
+): Passage[] {
+  return passages.filter((passage) => {
+    if (passage.committed || !passage.detected) {
+      return true;
+    }
+    return kind != null && passage.detected !== kind;
+  });
+}
+
+/**
+ * Replace detected passages with a new scan.
+ * Words already used by a passage you edited, or by a saved passage, stay put.
+ */
+export function mergeDetectedPassages(
+  passages: Passage[],
+  words: OcrWord[],
+  detected: DetectedPassage[],
+): Passage[] {
+  const kept = passages.filter(
+    (passage) => passage.committed || !passage.detected,
+  );
+  const taken = new Set(kept.flatMap((passage) => passage.selected));
+  const fresh = passagesFromDetection(
+    words,
+    detected
+      .map((span) => ({
+        ...span,
+        words: span.words.filter((index) => !taken.has(index)),
+      }))
+      .filter((span) => span.words.length > 0),
+  );
+  return [...kept, ...fresh];
 }
 
 export function pendingPassages(photo: PhotoDraft): Passage[] {
@@ -98,7 +137,7 @@ export function applyPassageDrag(
   let wrote = false;
   for (const passage of passages) {
     if (passage.id === passageId) {
-      next.push({ ...passage, selected, quote });
+      next.push({ ...passage, selected, quote, detected: false });
       wrote = true;
       continue;
     }
@@ -118,6 +157,7 @@ export function applyPassageDrag(
       ...passage,
       selected: remaining,
       quote: quoteFromWords(words, remaining),
+      detected: false,
     });
   }
   if (!wrote && create) {

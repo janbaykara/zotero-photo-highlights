@@ -1,3 +1,5 @@
+import { detectHighlightPassages } from "./highlights";
+import type { OpenCv } from "./opencv";
 import type { OcrWord } from "./types";
 
 export type RgbaImage = {
@@ -6,10 +8,13 @@ export type RgbaImage = {
   data: Uint8ClampedArray;
 };
 
+export type DetectedKind = "underline" | "highlight";
+
 export type DetectedPassage = {
   /** Word indexes, in reading order. */
   words: number[];
   color: string;
+  kind: DetectedKind;
 };
 
 const DEFAULT_COLOR = "#ffd400";
@@ -19,13 +24,15 @@ type LineWord = { index: number; word: OcrWord };
 type Stroke = { minX: number; maxX: number; top: number };
 
 /**
- * Find biro and pencil underlines and group them into passages.
- * Each OCR line is searched once, for a long flat dark stroke just under
- * the baseline. Highlighter washes are ignored.
+ * Find pen underlines and, when asked, highlighter behind the words.
+ * Each OCR line is searched once. A word that is both highlighted and underlined
+ * stays with the highlighter passage.
  */
 export function detectMarkedPassages(
   image: RgbaImage,
   words: OcrWord[],
+  cv?: OpenCv | null,
+  scan?: { underlines?: boolean; highlights?: boolean },
 ): DetectedPassage[] {
   if (!image.width || !image.height || !words.length) {
     return [];
@@ -33,11 +40,54 @@ export function detectMarkedPassages(
   if (image.data.length < image.width * image.height * 4) {
     return [];
   }
+  const underlines = scan?.underlines !== false;
+  const highlights = scan ? scan.highlights === true : Boolean(cv);
   const passages: DetectedPassage[] = [];
   for (const line of groupLines(words)) {
-    passages.push(...detectLine(image, line));
+    const highlighted =
+      highlights && cv
+        ? safeHighlights(cv, image, line).map((span) => ({
+            ...span,
+            kind: "highlight" as const,
+          }))
+        : [];
+    const claimed = new Set(highlighted.flatMap((span) => span.words));
+    const underlined = underlines ? detectLine(image, line, claimed) : [];
+    passages.push(...byReadingOrder(line, [...highlighted, ...underlined]));
   }
   return passages;
+}
+
+function safeHighlights(
+  cv: OpenCv,
+  image: RgbaImage,
+  line: LineWord[],
+): { words: number[]; color: string }[] {
+  try {
+    return detectHighlightPassages(
+      cv,
+      image,
+      line.map((entry) => ({ index: entry.index, ...entry.word })),
+    );
+  } catch (error) {
+    if (typeof ztoolkit !== "undefined") {
+      ztoolkit.log("Could not detect highlighter", error);
+    }
+    return [];
+  }
+}
+
+function byReadingOrder(
+  line: LineWord[],
+  spans: DetectedPassage[],
+): DetectedPassage[] {
+  const xOf = new Map(line.map((entry) => [entry.index, entry.word.x0]));
+  return spans
+    .filter((span) => span.words.length > 0)
+    .sort(
+      (a, b) =>
+        (xOf.get(a.words[0] ?? -1) ?? 0) - (xOf.get(b.words[0] ?? -1) ?? 0),
+    );
 }
 
 function groupLines(words: OcrWord[]): LineWord[][] {
@@ -58,7 +108,11 @@ function groupLines(words: OcrWord[]): LineWord[][] {
     );
 }
 
-function detectLine(image: RgbaImage, line: LineWord[]): DetectedPassage[] {
+function detectLine(
+  image: RgbaImage,
+  line: LineWord[],
+  claimed: Set<number>,
+): DetectedPassage[] {
   const usable = line.filter((entry) => {
     const width = entry.word.x1 - entry.word.x0;
     const height = entry.word.y1 - entry.word.y0;
@@ -92,25 +146,15 @@ function detectLine(image: RgbaImage, line: LineWord[]): DetectedPassage[] {
   if (band.right - band.left < 2 || band.bottom - band.top < 2) {
     return [];
   }
-  const paper = bandLuma(image, band);
   const width = band.right - band.left;
   const height = band.bottom - band.top;
-  const ink = new Uint8Array(width * height);
-  for (let y = band.top; y < band.bottom; y++) {
-    for (let x = band.left; x < band.right; x++) {
-      const pixel = sample(image, x, y);
-      if (pixel && isMonochromeInk(pixel, paper)) {
-        ink[(y - band.top) * width + (x - band.left)] = 1;
-      }
-    }
-  }
+  const ink = strokeMask(image, band, width, height, em);
   const strokes = mergeStrokes(
     components(ink, width, height, band).filter((stroke) =>
       isUnderline(stroke, em, band.top),
     ),
     em,
   );
-  const claimed = new Set<number>();
   const passages: DetectedPassage[] = [];
   for (const stroke of strokes) {
     const selected = usable.filter((entry) => {
@@ -132,6 +176,7 @@ function detectLine(image: RgbaImage, line: LineWord[]): DetectedPassage[] {
     passages.push({
       words: selected.map((entry) => entry.index),
       color: DEFAULT_COLOR,
+      kind: "underline",
     });
   }
   return passages;
@@ -248,20 +293,157 @@ function components(
   return strokes;
 }
 
-function bandLuma(
+function strokeMask(
   image: RgbaImage,
   band: { left: number; right: number; top: number; bottom: number },
-): number {
-  const values: number[] = [];
-  for (let y = band.top; y < band.bottom; y++) {
-    for (let x = band.left; x < band.right; x++) {
-      const pixel = sample(image, x, y);
-      if (pixel) {
-        values.push(luma(pixel[0], pixel[1], pixel[2]));
+  width: number,
+  height: number,
+  em: number,
+): Uint8Array {
+  const plane = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pixel = sample(image, band.left + x, band.top + y);
+      plane[y * width + x] = pixel ? luma(pixel[0], pixel[1], pixel[2]) : 255;
+    }
+  }
+  const paper = columnPaper(
+    plane,
+    width,
+    height,
+    Math.max(8, Math.round(em * 2)),
+  );
+  const ink = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pixel = sample(image, band.left + x, band.top + y);
+      if (pixel && isMonochromeInk(pixel, paper[x] ?? 255)) {
+        ink[y * width + x] = 1;
       }
     }
   }
-  return percentile(values, 0.5);
+  const closed = horizontalClose(
+    ink,
+    width,
+    height,
+    Math.max(2, Math.round(em * 0.45)),
+  );
+  return horizontalOpen(
+    closed,
+    width,
+    height,
+    Math.max(1, Math.round(em * 0.12)),
+  );
+}
+
+/** Moving average of each column's luma, so a shadow does not set the cutoff. */
+function columnPaper(
+  plane: Float32Array,
+  width: number,
+  height: number,
+  radius: number,
+): Float32Array {
+  const columns = new Float64Array(width);
+  for (let x = 0; x < width; x++) {
+    let sum = 0;
+    for (let y = 0; y < height; y++) {
+      sum += plane[y * width + x] ?? 0;
+    }
+    columns[x] = sum / height;
+  }
+  const prefix = new Float64Array(width + 1);
+  for (let x = 0; x < width; x++) {
+    prefix[x + 1] = (prefix[x] ?? 0) + (columns[x] ?? 0);
+  }
+  const paper = new Float32Array(width);
+  for (let x = 0; x < width; x++) {
+    const left = Math.max(0, x - radius);
+    const right = Math.min(width - 1, x + radius);
+    paper[x] =
+      ((prefix[right + 1] ?? 0) - (prefix[left] ?? 0)) / (right - left + 1);
+  }
+  return paper;
+}
+
+function horizontalClose(
+  ink: Uint8Array,
+  width: number,
+  height: number,
+  radius: number,
+): Uint8Array {
+  return horizontalErode(
+    horizontalDilate(ink, width, height, radius),
+    width,
+    height,
+    radius,
+  );
+}
+
+function horizontalOpen(
+  ink: Uint8Array,
+  width: number,
+  height: number,
+  radius: number,
+): Uint8Array {
+  return horizontalDilate(
+    horizontalErode(ink, width, height, radius),
+    width,
+    height,
+    radius,
+  );
+}
+
+function horizontalDilate(
+  ink: Uint8Array,
+  width: number,
+  height: number,
+  radius: number,
+): Uint8Array {
+  const dilated = new Uint8Array(ink.length);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      const left = Math.max(0, x - radius);
+      const right = Math.min(width - 1, x + radius);
+      for (let neighbor = left; neighbor <= right; neighbor++) {
+        if (ink[row + neighbor]) {
+          dilated[row + x] = 1;
+          break;
+        }
+      }
+    }
+  }
+  return dilated;
+}
+
+function horizontalErode(
+  ink: Uint8Array,
+  width: number,
+  height: number,
+  radius: number,
+): Uint8Array {
+  const eroded = new Uint8Array(ink.length);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      const left = Math.max(0, x - radius);
+      const right = Math.min(width - 1, x + radius);
+      if (right - left < radius * 2) {
+        continue;
+      }
+      let solid = true;
+      for (let neighbor = left; neighbor <= right; neighbor++) {
+        if (!ink[row + neighbor]) {
+          solid = false;
+          break;
+        }
+      }
+      if (solid) {
+        eroded[row + x] = 1;
+      }
+    }
+  }
+  return eroded;
 }
 
 function isMonochromeInk(
@@ -270,7 +452,8 @@ function isMonochromeInk(
 ): boolean {
   const [red, green, blue] = pixel;
   const pixelLuma = luma(red, green, blue);
-  if (paperLuma - pixelLuma < 40) {
+  const margin = Math.max(22, paperLuma * 0.08);
+  if (paperLuma - pixelLuma < margin) {
     return false;
   }
   if (chroma(red, green, blue) <= 42) {
