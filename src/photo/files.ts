@@ -111,6 +111,33 @@ export async function scaleLongestSide(
   }
 }
 
+export async function readImagePixels(
+  win: Window,
+  url: string,
+  width: number,
+  height: number,
+): Promise<{ width: number; height: number; data: Uint8ClampedArray } | null> {
+  if (!width || !height) {
+    return null;
+  }
+  try {
+    const image = await loadImage(win, url);
+    const canvas = win.document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+    context.drawImage(image, 0, 0, width, height);
+    const pixels = context.getImageData(0, 0, width, height);
+    return { width, height, data: pixels.data };
+  } catch (error) {
+    ztoolkit.log("Could not read photo pixels", error);
+    return null;
+  }
+}
+
 function loadImage(win: Window, url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new win.Image();

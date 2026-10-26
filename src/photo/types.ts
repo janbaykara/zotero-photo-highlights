@@ -12,6 +12,17 @@ export type OcrState = "pending" | "running" | "done" | "error";
 
 export type OcrEngine = "vision" | "windows" | "tesseract";
 
+export type Passage = {
+  id: string;
+  quote: string;
+  /** Word indexes chosen by dragging on the photo, in reading order. */
+  selected: number[];
+  comment: string;
+  color: string;
+  /** Already saved. Hidden on the mark step and not searched again. */
+  committed?: boolean;
+};
+
 export type PhotoDraft = {
   id: string;
   name: string;
@@ -32,11 +43,7 @@ export type PhotoDraft = {
   imageUrl: string;
   imageWidth: number;
   imageHeight: number;
-  quote: string;
-  /** Word indexes chosen by dragging on the photo. */
-  selected?: number[];
-  comment: string;
-  color: string;
+  passages: Passage[];
   bookId: number | null;
   bookTitle: string;
   kept: boolean;

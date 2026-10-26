@@ -24,8 +24,20 @@ import {
   copyIntoSession,
   imagePathsFromDrop,
   makeSessionDir,
+  readImagePixels,
   scaleLongestSide,
 } from "../photo/files";
+import { detectMarkedPassages } from "../photo/marks";
+import {
+  addEmptyPassage,
+  applyPassageDrag,
+  newPassageId,
+  passagesFromDetection,
+  passageOwning,
+  pendingPassages,
+  samePassages,
+  selectionContext,
+} from "../photo/passages";
 import { deleteFile, importPhoto, saveHighlight } from "../photo/save";
 import { bakeExifOrientation, writeQuarterTurns } from "../photo/orient";
 import { formatPhotoWhen, readPhotoTakenAt } from "../photo/takenAt";
@@ -33,6 +45,7 @@ import {
   OCR_LANGUAGES,
   type OcrEngine,
   type OcrWord,
+  type Passage,
   type PhotoDraft,
 } from "../photo/types";
 
@@ -42,11 +55,17 @@ type Decision =
   | {
       kind: "duplicate";
       photoId: string;
+      passageId: string;
       place: LocatedPlace;
       existingQuote: string;
     }
-  | { kind: "ambiguous"; photoId: string; places: LocatedPlace[] }
-  | { kind: "unmatched"; photoId: string };
+  | {
+      kind: "ambiguous";
+      photoId: string;
+      passageId: string;
+      places: LocatedPlace[];
+    }
+  | { kind: "unmatched"; photoId: string; passageId: string };
 
 type Counts = {
   located: number;
@@ -77,6 +96,7 @@ export function PhotoWizard(props: {
   const [step, setStep] = useState<Step>("add");
   const [photos, setPhotos] = useState<PhotoDraft[]>([]);
   const [markIndex, setMarkIndex] = useState(0);
+  const [markPassageId, setMarkPassageId] = useState<string | null>(null);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [decisionIndex, setDecisionIndex] = useState(0);
   const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS);
@@ -116,6 +136,7 @@ export function PhotoWizard(props: {
       }
     >(),
   );
+  const keepRequests = useRef(new Set<string>());
   const matchingPhotoId = useRef<string | null>(null);
   const matchingIds = useRef<string[]>([]);
   const matchingIndex = useRef(0);
@@ -177,10 +198,7 @@ export function PhotoWizard(props: {
         imageUrl: scaled.url,
         imageWidth: scaled.width,
         imageHeight: scaled.height,
-        quote: "",
-        selected: [],
-        comment: "",
-        color: "#ffd400",
+        passages: [],
         bookId: null,
         bookTitle: "",
         kept: false,
@@ -235,6 +253,23 @@ export function PhotoWizard(props: {
         language,
         win,
       );
+      let passages: Passage[] = [];
+      try {
+        const pixels = await readImagePixels(
+          win,
+          draft.imageUrl,
+          draft.imageWidth,
+          draft.imageHeight,
+        );
+        if (pixels) {
+          passages = passagesFromDetection(
+            recognized.words,
+            detectMarkedPassages(pixels, recognized.words),
+          );
+        }
+      } catch (error) {
+        ztoolkit.log("Could not detect marks", error);
+      }
       setPhotos((current) =>
         current.map((photo) =>
           photo.id === draft.id && photo.orientToken === token
@@ -243,8 +278,7 @@ export function PhotoWizard(props: {
                 ocr: "done",
                 ocrEngine: recognized.engine,
                 words: recognized.words,
-                quote: "",
-                selected: [],
+                passages,
               }
             : photo,
         ),
@@ -279,8 +313,7 @@ export function PhotoWizard(props: {
       ocr: "running",
       ocrEngine: null,
       words: [],
-      selected: [],
-      quote: "",
+      passages: [],
     });
     const prior = turnChain.current[id] ?? Promise.resolve();
     const job = prior
@@ -298,8 +331,7 @@ export function PhotoWizard(props: {
       ocr: "running",
       ocrEngine: null,
       words: [],
-      selected: [],
-      quote: "",
+      passages: [],
     });
     const prior = turnChain.current[id] ?? Promise.resolve();
     const job = prior
@@ -323,8 +355,7 @@ export function PhotoWizard(props: {
           ocr: "running",
           ocrEngine: null,
           words: [],
-          selected: [],
-          quote: "",
+          passages: [],
         });
         await runOcr({ ...latest, orientToken: token }, lang, token);
       });
@@ -405,8 +436,7 @@ export function PhotoWizard(props: {
             imageWidth: scaled.width,
             imageHeight: scaled.height,
             words: [],
-            selected: [],
-            quote: "",
+            passages: [],
             ocr: "running",
             ocrEngine: null,
           };
@@ -451,6 +481,47 @@ export function PhotoWizard(props: {
     );
   };
 
+  const updatePassage = (
+    photoId: string,
+    passageId: string,
+    patch: Partial<Passage>,
+  ) => {
+    setPhotos((current) =>
+      current.map((photo) =>
+        photo.id === photoId
+          ? {
+              ...photo,
+              passages: photo.passages.map((passage) =>
+                passage.id === passageId ? { ...passage, ...patch } : passage,
+              ),
+            }
+          : photo,
+      ),
+    );
+  };
+
+  const markCommitted = (photo: PhotoDraft, passageId: string) => {
+    const passage = photo.passages.find((item) => item.id === passageId);
+    if (passage) {
+      passage.committed = true;
+    }
+    updatePassage(photo.id, passageId, { committed: true });
+  };
+
+  /** Import the photo at most once, then delete the temp files. */
+  const releasePhoto = async (photo: PhotoDraft): Promise<boolean> => {
+    let imported = false;
+    if (keepRequests.current.has(photo.id) && photo.bookId && !photo.kept) {
+      await importPhoto(photo.bookId, photo.turnedPath || photo.sourcePath);
+      photo.kept = true;
+      updatePhoto(photo.id, { kept: true });
+      keepRequests.current.delete(photo.id);
+      imported = true;
+    }
+    await discardPhoto(photo);
+    return imported;
+  };
+
   const imageRatio = (): number => {
     const count = matchingCount.current;
     if (!count) {
@@ -486,11 +557,12 @@ export function PhotoWizard(props: {
     }
   };
 
-  const locatePhoto = async (
+  const locatePassage = async (
     photo: PhotoDraft,
+    passage: Passage,
     sink?: (progress: MatchProgress) => void,
   ): Promise<MatchOutcome> => {
-    if (!photo.bookId || !photo.quote.trim()) {
+    if (!photo.bookId || !passage.quote.trim()) {
       return { kind: "unmatched" };
     }
     const book = await Zotero.Items.getAsync(photo.bookId);
@@ -498,7 +570,12 @@ export function PhotoWizard(props: {
       return { kind: "unmatched" };
     }
     try {
-      return await matchQuote(book, photo.quote, selectionContext(photo), sink);
+      return await matchQuote(
+        book,
+        passage.quote,
+        selectionContext(photo.words, passage.selected),
+        sink,
+      );
     } catch (error) {
       const thrown = error as { message?: string };
       ztoolkit.log("Could not match photo", thrown?.message || String(error));
@@ -506,26 +583,29 @@ export function PhotoWizard(props: {
     }
   };
 
-  const locateKey = (photo: PhotoDraft): string => {
-    const context = selectionContext(photo);
+  const locateKey = (photo: PhotoDraft, passage: Passage): string => {
+    const context = selectionContext(photo.words, passage.selected);
     return [
       photo.orientToken,
       photo.bookId ?? "",
-      photo.quote,
+      passage.quote,
       context.before,
       context.after,
     ].join("\u0000");
   };
 
-  const ensureLocate = (photo: PhotoDraft): Promise<MatchOutcome> => {
-    const key = locateKey(photo);
-    const existing = locateJobs.current.get(photo.id);
+  const ensureLocate = (
+    photo: PhotoDraft,
+    passage: Passage,
+  ): Promise<MatchOutcome> => {
+    const key = locateKey(photo, passage);
+    const existing = locateJobs.current.get(passage.id);
     if (existing?.key === key) {
       return existing.promise;
     }
-    const snapshot: PhotoDraft = {
-      ...photo,
-      selected: photo.selected ? [...photo.selected] : undefined,
+    const snapshot: Passage = {
+      ...passage,
+      selected: [...passage.selected],
     };
     const job: {
       key: string;
@@ -539,13 +619,13 @@ export function PhotoWizard(props: {
       ratio: 0,
       promise: Promise.resolve({ kind: "unmatched" }),
     };
-    job.promise = locatePhoto(snapshot, (progress) => {
-      if (locateJobs.current.get(photo.id) !== job) {
+    job.promise = locatePassage(photo, snapshot, (progress) => {
+      if (locateJobs.current.get(passage.id) !== job) {
         return;
       }
-      noteProgress(photo.id, progress);
+      noteProgress(passage.id, progress);
     }).then((outcome) => {
-      if (locateJobs.current.get(photo.id) === job) {
+      if (locateJobs.current.get(passage.id) === job) {
         job.done = true;
         job.ratio = 1;
         if (stepRef.current === "matching") {
@@ -554,34 +634,34 @@ export function PhotoWizard(props: {
       }
       return outcome;
     });
-    locateJobs.current.set(photo.id, job);
+    locateJobs.current.set(passage.id, job);
     return job.promise;
   };
 
-  const locateReady = (photo: PhotoDraft): boolean => {
-    const job = locateJobs.current.get(photo.id);
-    return !!job && job.key === locateKey(photo) && job.done;
+  const locateReady = (photo: PhotoDraft, passage: Passage): boolean => {
+    const job = locateJobs.current.get(passage.id);
+    return !!job && job.key === locateKey(photo, passage) && job.done;
   };
 
   const commitMatch = async (
     photo: PhotoDraft,
+    passage: Passage,
     outcome: MatchOutcome,
   ): Promise<{ kind: "saved"; item: Zotero.Item } | Decision> => {
     if (outcome.kind === "located") {
       try {
-        noteProgress(photo.id, {
+        noteProgress(passage.id, {
           activity: "wizard-matching-saving",
           ratio: 1,
         });
         const saved = await saveHighlight({
           attachmentId: outcome.place.attachmentId,
-          quote: photo.quote,
-          comment: photo.comment,
-          color: photo.color,
+          quote: passage.quote,
+          comment: passage.comment,
+          color: passage.color,
           place: outcome.place,
           takenAt: photo.takenAt,
         });
-        await discardPhoto(photo);
         return { kind: "saved", item: saved.item };
       } catch (error) {
         const thrown = error as { message?: string };
@@ -589,13 +669,18 @@ export function PhotoWizard(props: {
           "Could not save highlight",
           thrown?.message || String(error),
         );
-        return { kind: "unmatched", photoId: photo.id };
+        return {
+          kind: "unmatched",
+          photoId: photo.id,
+          passageId: passage.id,
+        };
       }
     }
     if (outcome.kind === "duplicate") {
       return {
         kind: "duplicate",
         photoId: photo.id,
+        passageId: passage.id,
         place: outcome.place,
         existingQuote: outcome.existingQuote,
       };
@@ -604,22 +689,24 @@ export function PhotoWizard(props: {
       return {
         kind: "ambiguous",
         photoId: photo.id,
+        passageId: passage.id,
         places: outcome.places,
       };
     }
-    return { kind: "unmatched", photoId: photo.id };
+    return { kind: "unmatched", photoId: photo.id, passageId: passage.id };
   };
 
   const showMatching = async (
     photo: PhotoDraft,
+    passage: Passage,
     index: number,
     count: number,
   ) => {
     setMatchBook(photo.bookTitle || photo.name);
     setMatchPlace({ index, count });
-    setMatchSought(shortQuote(photo.quote));
+    setMatchSought(shortQuote(passage.quote));
     setMatchWhen(photo.takenAt == null ? "" : formatPhotoWhen(photo.takenAt));
-    matchingPhotoId.current = photo.id;
+    matchingPhotoId.current = passage.id;
     matchingIndex.current = index;
     matchingCount.current = count;
     paintProgress();
@@ -637,12 +724,11 @@ export function PhotoWizard(props: {
     setBusy(true);
     reviewedRef.current = true;
     fromReviewRef.current = false;
-    matchingIds.current = batch
-      .filter((photo) => highlightGiven(photo))
-      .map((photo) => photo.id);
-    const waiting = batch.some(
-      (photo) => highlightGiven(photo) && !locateReady(photo),
+    const work = batch.flatMap((photo) =>
+      pendingPassages(photo).map((passage) => ({ photo, passage })),
     );
+    matchingIds.current = work.map((item) => item.passage.id);
+    const waiting = work.some((item) => !locateReady(item.photo, item.passage));
     if (waiting) {
       stepRef.current = "matching";
       setStep("matching");
@@ -651,22 +737,44 @@ export function PhotoWizard(props: {
     const nextCounts = { ...EMPTY_COUNTS };
     const nextCreated: Zotero.Item[] = [];
     try {
-      for (let index = 0; index < batch.length; index++) {
-        const photo = batch[index];
-        if (!highlightGiven(photo)) {
-          nextCounts.skipped += 1;
-          await discardPhoto(photo);
+      for (const photo of batch) {
+        if (pendingPassages(photo).length > 0) {
           continue;
         }
-        if (!locateReady(photo)) {
-          await showMatching(photo, index + 1, batch.length);
+        nextCounts.skipped += 1;
+        if (await releasePhoto(photo)) {
+          nextCounts.photosKept += 1;
         }
-        const result = await commitMatch(photo, await ensureLocate(photo));
+      }
+      for (let index = 0; index < work.length; index++) {
+        const item = work[index];
+        if (!item) {
+          continue;
+        }
+        if (!locateReady(item.photo, item.passage)) {
+          await showMatching(item.photo, item.passage, index + 1, work.length);
+        }
+        const result = await commitMatch(
+          item.photo,
+          item.passage,
+          await ensureLocate(item.photo, item.passage),
+        );
         if (result.kind === "saved") {
           nextCreated.push(result.item);
           nextCounts.located += 1;
+          markCommitted(item.photo, item.passage.id);
         } else {
           nextDecisions.push(result);
+        }
+      }
+      const worked = new Set(work.map((item) => item.photo.id));
+      for (const photoId of worked) {
+        if (nextDecisions.some((decision) => decision.photoId === photoId)) {
+          continue;
+        }
+        const photo = batch.find((item) => item.id === photoId);
+        if (photo && (await releasePhoto(photo))) {
+          nextCounts.photosKept += 1;
         }
       }
       setCounts(nextCounts);
@@ -680,28 +788,60 @@ export function PhotoWizard(props: {
   };
 
   const rematchPhoto = async (photo: PhotoDraft) => {
+    const latest =
+      photosRef.current.find((item) => item.id === photo.id) ?? photo;
+    const pending = pendingPassages(latest);
     setBusy(true);
-    matchingIds.current = [photo.id];
+    matchingIds.current = pending.map((passage) => passage.id);
     stepRef.current = "matching";
     setStep("matching");
     try {
-      await showMatching(photo, 1, 1);
-      const result = await commitMatch(photo, await ensureLocate(photo));
-      if (result.kind === "saved") {
-        setCreated((current) => [...current, result.item]);
-        setCounts((current) => ({ ...current, located: current.located + 1 }));
-        const rest = decisions.filter((item) => item.photoId !== photo.id);
-        setDecisions(rest);
-        setDecisionIndex((current) =>
-          Math.min(current, Math.max(0, rest.length - 1)),
+      const fresh: Decision[] = [];
+      const saved: Zotero.Item[] = [];
+      for (let index = 0; index < pending.length; index++) {
+        const passage = pending[index];
+        if (!passage) {
+          continue;
+        }
+        await showMatching(latest, passage, index + 1, pending.length);
+        const result = await commitMatch(
+          latest,
+          passage,
+          await ensureLocate(latest, passage),
         );
-        setStep(rest.length ? "review" : "summary");
-      } else {
-        setDecisions((current) =>
-          current.map((item) => (item.photoId === photo.id ? result : item)),
-        );
-        setStep("review");
+        if (result.kind === "saved") {
+          saved.push(result.item);
+          markCommitted(latest, passage.id);
+        } else {
+          fresh.push(result);
+        }
       }
+      if (saved.length) {
+        setCreated((current) => [...current, ...saved]);
+        setCounts((current) => ({
+          ...current,
+          located: current.located + saved.length,
+        }));
+      }
+      const touched = new Set(pending.map((passage) => passage.id));
+      const rest = [
+        ...decisions.filter((item) => !touched.has(item.passageId)),
+        ...fresh,
+      ];
+      setDecisions(rest);
+      if (!rest.some((item) => item.photoId === latest.id)) {
+        const imported = await releasePhoto(latest);
+        if (imported) {
+          setCounts((current) => ({
+            ...current,
+            photosKept: current.photosKept + 1,
+          }));
+        }
+      }
+      setDecisionIndex((current) =>
+        Math.min(current, Math.max(0, rest.length - 1)),
+      );
+      setStep(rest.length ? "review" : "summary");
     } finally {
       setBusy(false);
       fromReviewRef.current = false;
@@ -714,56 +854,63 @@ export function PhotoWizard(props: {
     place?: LocatedPlace,
   ) => {
     const photo = photos.find((item) => item.id === decision.photoId);
-    if (!photo) {
+    const passage = photo?.passages.find(
+      (item) => item.id === decision.passageId,
+    );
+    if (!photo || !passage) {
       return;
     }
     const next = { ...counts };
+    const laterOpen = decisions
+      .slice(decisionIndex + 1)
+      .some((item) => item.photoId === photo.id);
+    const settlePhoto = async () => {
+      markCommitted(photo, passage.id);
+      if (!laterOpen && (await releasePhoto(photo))) {
+        next.photosKept += 1;
+      }
+    };
     if (action === "skip") {
       next.skipped += 1;
       if (decision.kind === "duplicate") {
         next.duplicatesSkipped += 1;
-        await discardPhoto(photo);
       } else if (keepPhotos && photo.bookId) {
-        photo.kept = true;
-        await importPhoto(photo.bookId, photo.turnedPath || photo.sourcePath);
-        next.photosKept += 1;
-        await discardPhoto(photo);
-      } else {
-        await discardPhoto(photo);
+        keepRequests.current.add(photo.id);
       }
+      await settlePhoto();
     } else if (action === "create" && decision.kind === "duplicate") {
       const saved = await saveHighlight({
         attachmentId: decision.place.attachmentId,
-        quote: photo.quote,
-        comment: photo.comment,
-        color: photo.color,
+        quote: passage.quote,
+        comment: passage.comment,
+        color: passage.color,
         place: decision.place,
         takenAt: photo.takenAt,
       });
       setCreated((current) => [...current, saved.item]);
       next.duplicatesCreated += 1;
-      await discardPhoto(photo);
+      await settlePhoto();
     } else if (action === "place" && place) {
       const saved = await saveHighlight({
         attachmentId: place.attachmentId,
-        quote: photo.quote,
-        comment: photo.comment,
-        color: photo.color,
+        quote: passage.quote,
+        comment: passage.comment,
+        color: passage.color,
         place,
         takenAt: photo.takenAt,
       });
       setCreated((current) => [...current, saved.item]);
       next.located += 1;
-      await discardPhoto(photo);
+      await settlePhoto();
     } else if (action === "unlocated" && photo.bookId) {
       const book = await Zotero.Items.getAsync(photo.bookId);
       const files = book ? await fileParent(book) : null;
       if (files) {
         const saved = await saveHighlight({
           attachmentId: files.id,
-          quote: photo.quote,
-          comment: photo.comment,
-          color: photo.color,
+          quote: passage.quote,
+          comment: passage.comment,
+          color: passage.color,
           place: null,
           takenAt: photo.takenAt,
         });
@@ -771,13 +918,9 @@ export function PhotoWizard(props: {
         next.unlocated += 1;
       }
       if (keepPhotos) {
-        photo.kept = true;
-        await importPhoto(photo.bookId, photo.turnedPath || photo.sourcePath);
-        next.photosKept += 1;
-        await discardPhoto(photo);
-      } else {
-        await discardPhoto(photo);
+        keepRequests.current.add(photo.id);
       }
+      await settlePhoto();
     }
     setCounts(next);
     const following = decisionIndex + 1;
@@ -799,8 +942,12 @@ export function PhotoWizard(props: {
   };
 
   const abandonReviewedPhoto = async (photo: PhotoDraft) => {
-    await discardPhoto(photo);
-    setCounts((current) => ({ ...current, skipped: current.skipped + 1 }));
+    const imported = await releasePhoto(photo);
+    setCounts((current) => ({
+      ...current,
+      skipped: current.skipped + 1,
+      photosKept: current.photosKept + (imported ? 1 : 0),
+    }));
     const rest = decisions.filter((item) => item.photoId !== photo.id);
     setDecisions(rest);
     setDecisionIndex((current) =>
@@ -912,7 +1059,9 @@ export function PhotoWizard(props: {
               photo={photos[markIndex]}
               index={markIndex}
               count={photos.length}
+              activePassageId={markPassageId}
               updatePhoto={updatePhoto}
+              onActivePassage={setMarkPassageId}
               onRotate={rotatePhoto}
               onRerunOcr={rerunOcr}
               onSkip={skipCurrentPhoto}
@@ -929,7 +1078,7 @@ export function PhotoWizard(props: {
                 {matchPlace.count > 0 ? (
                   <p class="flex flex-wrap items-center justify-center gap-2 text-xs text-secondary">
                     <span>
-                      {getString("wizard-mark-count", {
+                      {getString("wizard-passage-count", {
                         args: {
                           index: matchPlace.index,
                           count: matchPlace.count,
@@ -954,7 +1103,7 @@ export function PhotoWizard(props: {
                   aria-valuenow={Math.round(matchProgress.ratio * 100)}
                   aria-label={
                     matchPlace.count > 0
-                      ? getString("wizard-mark-count", {
+                      ? getString("wizard-passage-count", {
                           args: {
                             index: matchPlace.index,
                             count: matchPlace.count,
@@ -987,38 +1136,43 @@ export function PhotoWizard(props: {
         {step === "review" ? (
           <ReviewStep
             decision={decisions[decisionIndex]}
-            index={Math.max(
-              0,
-              photos.findIndex(
-                (photo) => photo.id === decisions[decisionIndex]?.photoId,
-              ),
-            )}
-            count={photos.length}
+            index={decisionIndex}
+            count={decisions.length}
             photo={photos.find(
               (photo) => photo.id === decisions[decisionIndex]?.photoId,
             )}
+            passage={photos
+              .find((photo) => photo.id === decisions[decisionIndex]?.photoId)
+              ?.passages.find(
+                (passage) => passage.id === decisions[decisionIndex]?.passageId,
+              )}
             keepPhotos={keepPhotos}
             onKeep={(value) => {
               setKeepPhotos(value);
             }}
             onQuote={(quote) => {
-              const photoId = decisions[decisionIndex]?.photoId;
-              if (photoId) {
-                updatePhoto(photoId, { quote });
+              const decision = decisions[decisionIndex];
+              if (decision) {
+                updatePassage(decision.photoId, decision.passageId, { quote });
               }
             }}
             onComment={(comment) => {
-              const photoId = decisions[decisionIndex]?.photoId;
-              if (photoId) {
-                updatePhoto(photoId, { comment });
+              const decision = decisions[decisionIndex];
+              if (decision) {
+                updatePassage(decision.photoId, decision.passageId, {
+                  comment,
+                });
               }
             }}
             onRedo={() => {
-              const photoId = decisions[decisionIndex]?.photoId;
-              const index = photos.findIndex((photo) => photo.id === photoId);
+              const decision = decisions[decisionIndex];
+              const index = photos.findIndex(
+                (photo) => photo.id === decision?.photoId,
+              );
               if (index >= 0) {
                 setMarkIndex(index);
               }
+              setMarkPassageId(decision?.passageId ?? null);
               fromReviewRef.current = true;
               setStep("mark");
             }}
@@ -1087,7 +1241,7 @@ export function PhotoWizard(props: {
                 openMark(photos);
               } else if (fromReviewRef.current) {
                 const photo = photos[markIndex];
-                if (photo && !highlightGiven(photo)) {
+                if (photo && pendingPassages(photo).length === 0) {
                   fromReviewRef.current = false;
                   updatePhoto(photo.id, { skipped: true });
                   void abandonReviewedPhoto(photo);
@@ -1096,8 +1250,10 @@ export function PhotoWizard(props: {
                 }
               } else if (step === "mark") {
                 const photo = photos[markIndex];
-                if (photo && highlightGiven(photo)) {
-                  void ensureLocate(photo);
+                if (photo) {
+                  for (const passage of pendingPassages(photo)) {
+                    void ensureLocate(photo, passage);
+                  }
                 }
                 const next = neighborIndex(photos, markIndex, 1);
                 if (next >= 0) {
@@ -1421,10 +1577,6 @@ function shortQuote(quote: string): string {
   return `${flat.slice(0, 177).trim()}…`;
 }
 
-function highlightGiven(photo: PhotoDraft): boolean {
-  return !photo.skipped && photo.quote.trim().length > 0;
-}
-
 function neighborIndex(
   list: PhotoDraft[],
   from: number,
@@ -1446,7 +1598,9 @@ function MarkStep(props: {
   photo: PhotoDraft | undefined;
   index: number;
   count: number;
+  activePassageId: string | null;
   updatePhoto: (id: string, patch: Partial<PhotoDraft>) => void;
+  onActivePassage: (id: string | null) => void;
   onRotate: (id: string, delta: number) => void;
   onRerunOcr: (id: string) => void;
   onSkip: () => void;
@@ -1456,35 +1610,65 @@ function MarkStep(props: {
     x: number;
     y: number;
     anchor: number | null;
+    passageId: string;
+    create: boolean;
+    /** Passages at pointer-down, so a drag can shrink without losing words. */
+    passages: Passage[];
   } | null>(null);
   const quoteRef = useRef<HTMLTextAreaElement>(null);
   const quoteFocus = useRef(false);
-  const [editingQuote, setEditingQuote] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const photoId = photo?.id ?? "";
   useEffect(() => {
-    setEditingQuote(false);
+    setEditingId(null);
   }, [photoId]);
   useEffect(() => {
-    if (editingQuote && quoteFocus.current) {
+    if (editingId && quoteFocus.current) {
       quoteFocus.current = false;
       const field = quoteRef.current;
       field?.focus();
       const end = field?.value.length ?? 0;
       field?.setSelectionRange(end, end);
     }
-  }, [editingQuote]);
+  }, [editingId]);
   if (!photo) {
     return null;
   }
-  const applySelection = (anchor: number | null, end: number | null) => {
-    const next = passageBetween(photo.words, anchor, end);
-    if (
-      sameIndexes(photo.selected, next.selected) &&
-      photo.quote === next.quote
-    ) {
+  const visible = photo.passages.filter((passage) => !passage.committed);
+  const active =
+    visible.find((passage) => passage.id === props.activePassageId) ??
+    visible[0] ??
+    null;
+  const applyDrag = (end: number | null) => {
+    const start = drag.current;
+    if (!start) {
       return;
     }
-    props.updatePhoto(photo.id, next);
+    const next = applyPassageDrag(
+      start.passages,
+      photo.words,
+      start.anchor,
+      end,
+      start.passageId,
+      start.create,
+    );
+    if (samePassages(photo.passages, next)) {
+      return;
+    }
+    props.updatePhoto(photo.id, { passages: next });
+    if (next.some((passage) => passage.id === start.passageId)) {
+      props.onActivePassage(start.passageId);
+    }
+  };
+  const editPassage = (id: string) => {
+    quoteFocus.current = true;
+    props.onActivePassage(id);
+    setEditingId(id);
+  };
+  const addPassage = () => {
+    const added = addEmptyPassage(photo.passages);
+    props.updatePhoto(photo.id, { passages: added.passages });
+    editPassage(added.id);
   };
   return (
     <div class="flex h-full min-h-0 min-w-0 items-stretch gap-4 overflow-hidden">
@@ -1498,12 +1682,23 @@ function MarkStep(props: {
           onDragStart={(event) => event.preventDefault()}
           onPointerDown={(event) => {
             event.preventDefault();
-            setEditingQuote(false);
+            setEditingId(null);
             const point = relativePoint(event);
             const anchor = wordIndexAt(photo.words, point.x, point.y, false);
-            drag.current = { ...point, anchor };
+            const owning =
+              anchor == null ? null : passageOwning(photo.passages, anchor);
+            drag.current = {
+              ...point,
+              anchor,
+              passageId: owning ?? newPassageId(),
+              create: owning == null,
+              passages: photo.passages,
+            };
+            if (owning) {
+              props.onActivePassage(owning);
+            }
             event.currentTarget.setPointerCapture(event.pointerId);
-            applySelection(anchor, anchor);
+            applyDrag(anchor);
           }}
           onPointerMove={(event) => {
             const start = drag.current;
@@ -1512,13 +1707,17 @@ function MarkStep(props: {
             }
             event.preventDefault();
             const endPoint = relativePoint(event);
-            let anchor = start.anchor;
             const end = wordIndexAt(photo.words, endPoint.x, endPoint.y, true);
-            if (anchor == null && end != null) {
-              anchor = end;
+            if (start.anchor == null && end != null) {
               start.anchor = end;
+              const owning = passageOwning(photo.passages, end);
+              if (owning) {
+                start.passageId = owning;
+                start.create = false;
+                props.onActivePassage(owning);
+              }
             }
-            applySelection(anchor, end);
+            applyDrag(end);
           }}
           onPointerUp={(event) => {
             const start = drag.current;
@@ -1533,7 +1732,12 @@ function MarkStep(props: {
               endPoint.y,
               start.x !== endPoint.x || start.y !== endPoint.y,
             );
-            applySelection(start.anchor, end);
+            if (start.anchor == null && end != null) {
+              start.anchor = end;
+            }
+            drag.current = start;
+            applyDrag(end);
+            drag.current = null;
           }}
         >
           <img
@@ -1587,6 +1791,11 @@ function MarkStep(props: {
             >
               {getString("wizard-mark-rerecognize")}
             </button>
+            {photo.ocr === "done" && photo.ocrEngine ? (
+              <span class="text-xs text-secondary">
+                {getString(ocrEngineKey(photo.ocrEngine))}
+              </span>
+            ) : null}
           </div>
         </div>
         {photo.ocr === "running" || photo.ocr === "pending" ? (
@@ -1599,54 +1808,118 @@ function MarkStep(props: {
             {getString("wizard-mark-ocr-failed")}
           </p>
         ) : null}
-        <div class="flex min-h-0 flex-1 flex-col gap-1">
+        <div class="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
           <p class="text-xs text-secondary">
             {getString("wizard-mark-selected")}
           </p>
-          {editingQuote ? (
-            <textarea
-              ref={quoteRef}
-              class="min-h-0 w-full flex-1 overflow-auto rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
-              style="resize:none;min-height:4rem"
-              placeholder={getString("wizard-mark-type")}
-              value={photo.quote}
-              onInput={(event) =>
-                props.updatePhoto(photo.id, {
-                  quote: (event.currentTarget as HTMLTextAreaElement).value,
-                  selected: [],
-                })
-              }
-              onBlur={() => setEditingQuote(false)}
-            />
-          ) : (
-            <div
-              role="button"
-              tabIndex={0}
-              class={`min-h-0 flex-1 overflow-auto text-left text-sm ${
-                photo.quote ? "" : "text-secondary"
-              }`}
-              style={
-                photo.quote
-                  ? `${quoteButtonStyle};color:inherit`
-                  : quoteButtonStyle
-              }
-              title={getString("wizard-mark-type")}
-              onClick={() => {
-                quoteFocus.current = true;
-                setEditingQuote(true);
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") {
-                  return;
-                }
-                event.preventDefault();
-                quoteFocus.current = true;
-                setEditingQuote(true);
-              }}
-            >
-              {photo.quote || getString("wizard-mark-type")}
-            </div>
-          )}
+          <div class="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
+            {visible.length === 0 ? (
+              <div
+                role="button"
+                tabIndex={0}
+                class="text-left text-sm text-secondary"
+                style={quoteButtonStyle}
+                title={getString("wizard-mark-type")}
+                onClick={addPassage}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") {
+                    return;
+                  }
+                  event.preventDefault();
+                  addPassage();
+                }}
+              >
+                {getString("wizard-mark-type")}
+              </div>
+            ) : (
+              visible.map((passage) => (
+                <div
+                  key={passage.id}
+                  class="flex items-start gap-1"
+                  style={
+                    passage.id === active?.id
+                      ? "outline:2px solid currentColor;border-radius:4px"
+                      : undefined
+                  }
+                >
+                  {editingId === passage.id ? (
+                    <textarea
+                      ref={quoteRef}
+                      class="min-h-0 w-full flex-1 overflow-auto rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
+                      style="resize:none;min-height:4rem"
+                      placeholder={getString("wizard-mark-type")}
+                      value={passage.quote}
+                      onInput={(event) =>
+                        props.updatePhoto(photo.id, {
+                          passages: photo.passages.map((item) =>
+                            item.id === passage.id
+                              ? {
+                                  ...item,
+                                  quote: (
+                                    event.currentTarget as HTMLTextAreaElement
+                                  ).value,
+                                  selected: [],
+                                }
+                              : item,
+                          ),
+                        })
+                      }
+                      onBlur={() => setEditingId(null)}
+                    />
+                  ) : (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      class={`min-h-0 flex-1 overflow-auto text-left text-sm ${
+                        passage.quote ? "" : "text-secondary"
+                      }`}
+                      style={
+                        passage.quote
+                          ? `${quoteButtonStyle};background:${colorWithAlpha(passage.color, 0.45)}`
+                          : quoteButtonStyle
+                      }
+                      title={getString("wizard-mark-type")}
+                      onClick={() => editPassage(passage.id)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") {
+                          return;
+                        }
+                        event.preventDefault();
+                        editPassage(passage.id);
+                      }}
+                    >
+                      {passage.quote || getString("wizard-mark-type")}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    class="px-2 py-1"
+                    title={getString("wizard-mark-remove-passage")}
+                    aria-label={getString("wizard-mark-remove-passage")}
+                    onClick={() => {
+                      props.updatePhoto(photo.id, {
+                        passages: photo.passages.filter(
+                          (item) => item.id !== passage.id,
+                        ),
+                      });
+                      if (props.activePassageId === passage.id) {
+                        props.onActivePassage(null);
+                      }
+                    }}
+                  >
+                    <RemoveIcon />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+          <button
+            type="button"
+            class="flex-none self-start px-2 py-1"
+            onClick={addPassage}
+          >
+            {getString("wizard-mark-add")}
+          </button>
         </div>
         <div
           class="flex flex-none flex-wrap gap-1.5"
@@ -1664,9 +1937,18 @@ function MarkStep(props: {
               style={{
                 background: color,
                 outline:
-                  photo.color === color ? "2px solid currentColor" : "none",
+                  active?.color === color ? "2px solid currentColor" : "none",
               }}
-              onClick={() => props.updatePhoto(photo.id, { color })}
+              onClick={() => {
+                if (!active) {
+                  return;
+                }
+                props.updatePhoto(photo.id, {
+                  passages: photo.passages.map((passage) =>
+                    passage.id === active.id ? { ...passage, color } : passage,
+                  ),
+                });
+              }}
             />
           ))}
         </div>
@@ -1710,106 +1992,6 @@ function photoFrameStyle(photo: PhotoDraft): string {
     "max-width:100%",
     "max-height:100%",
   ].join(";");
-}
-
-function sameIndexes(current: number[] | undefined, next: number[]): boolean {
-  if (!current || current.length !== next.length) {
-    return false;
-  }
-  return current.every((index, place) => index === next[place]);
-}
-
-/** Words from the anchor through the word under the pointer, in reading order. */
-function passageBetween(
-  words: OcrWord[],
-  anchor: number | null,
-  end: number | null,
-): { quote: string; selected: number[] } {
-  if (anchor == null && end == null) {
-    return { quote: "", selected: [] };
-  }
-  const from = anchor ?? end;
-  const to = end ?? anchor;
-  if (from == null || to == null) {
-    return { quote: "", selected: [] };
-  }
-  const order = readingOrder(words);
-  const startAt = order.indexOf(from);
-  const endAt = order.indexOf(to);
-  if (startAt < 0 || endAt < 0) {
-    return { quote: "", selected: [] };
-  }
-  const selected = order.slice(
-    Math.min(startAt, endAt),
-    Math.max(startAt, endAt) + 1,
-  );
-  return {
-    selected,
-    quote: selected.map((index) => words[index]?.text || "").join(" "),
-  };
-}
-
-function selectionContext(photo: PhotoDraft): {
-  before: string;
-  after: string;
-} {
-  const selected = new Set(photo.selected || []);
-  if (!selected.size) {
-    return { before: "", after: "" };
-  }
-  const order = readingOrder(photo.words);
-  let first = -1;
-  let last = -1;
-  for (let place = 0; place < order.length; place++) {
-    if (!selected.has(order[place])) {
-      continue;
-    }
-    if (first < 0) {
-      first = place;
-    }
-    last = place;
-  }
-  if (first < 0 || last < 0) {
-    return { before: "", after: "" };
-  }
-  const textAt = (indexes: number[]) =>
-    indexes
-      .map((index) => photo.words[index]?.text || "")
-      .filter(Boolean)
-      .join(" ");
-  const wing = 12;
-  return {
-    before: textAt(order.slice(Math.max(0, first - wing), first)),
-    after: textAt(order.slice(last + 1, last + 1 + wing)),
-  };
-}
-
-function readingOrder(words: OcrWord[]): number[] {
-  if (words.length && words.every((word) => Number.isFinite(word.line))) {
-    return words
-      .map((word, index) => ({ word, index }))
-      .sort((a, b) => a.word.line - b.word.line || a.index - b.index)
-      .map((entry) => entry.index);
-  }
-  const items = words.map((word, index) => ({ word, index }));
-  items.sort((a, b) => a.word.y0 - b.word.y0 || a.word.x0 - b.word.x0);
-  const lines: { word: OcrWord; index: number }[][] = [];
-  for (const item of items) {
-    const line = lines[lines.length - 1];
-    const mid = (item.word.y0 + item.word.y1) / 2;
-    if (
-      line &&
-      mid >= Math.min(...line.map((entry) => entry.word.y0)) &&
-      mid <= Math.max(...line.map((entry) => entry.word.y1))
-    ) {
-      line.push(item);
-    } else {
-      lines.push([item]);
-    }
-  }
-  return lines.flatMap((line) =>
-    line.sort((a, b) => a.word.x0 - b.word.x0).map((entry) => entry.index),
-  );
 }
 
 function wordIndexAt(
@@ -1870,14 +2052,22 @@ function relativePoint(event: h.JSX.TargetedPointerEvent<HTMLDivElement>): {
 }
 
 function WordBoxes(props: { photo: PhotoDraft }) {
-  const selected = new Set(props.photo.selected || []);
+  const colorAt = new Map<number, string>();
+  for (const passage of props.photo.passages) {
+    if (passage.committed) {
+      continue;
+    }
+    for (const index of passage.selected) {
+      colorAt.set(index, passage.color);
+    }
+  }
   return (
     <div class="pointer-events-none absolute inset-0">
       {props.photo.words.map((word, index) => (
         <span
           key={`${word.x0}-${word.y0}-${word.text}`}
           class="absolute"
-          style={wordStyle(word, props.photo, selected.has(index))}
+          style={wordStyle(word, props.photo, colorAt.get(index) ?? null)}
         />
       ))}
     </div>
@@ -1887,7 +2077,7 @@ function WordBoxes(props: { photo: PhotoDraft }) {
 function wordStyle(
   word: OcrWord,
   photo: PhotoDraft,
-  selected: boolean,
+  color: string | null,
 ): string {
   const width = photo.imageWidth || 1;
   const height = photo.imageHeight || 1;
@@ -1896,10 +2086,10 @@ function wordStyle(
   const boxWidth = ((word.x1 - word.x0) / width) * 100;
   const boxHeight = ((word.y1 - word.y0) / height) * 100;
   const box = `left:${left}%;top:${top}%;width:${boxWidth}%;height:${boxHeight}%`;
-  if (!selected) {
+  if (!color) {
     return box;
   }
-  return `${box};background:${colorWithAlpha(photo.color, 0.6)}`;
+  return `${box};background:${colorWithAlpha(color, 0.6)}`;
 }
 
 function colorWithAlpha(color: string, alpha: number): string {
@@ -1946,9 +2136,9 @@ type ReviewChoice = { kind: "place"; index: number } | { kind: "none" };
 
 function choiceSignature(decision: Decision): string {
   if (decision.kind !== "ambiguous") {
-    return `${decision.photoId}:${decision.kind}`;
+    return `${decision.photoId}:${decision.passageId}:${decision.kind}`;
   }
-  return `${decision.photoId}:ambiguous:${decision.places
+  return `${decision.photoId}:${decision.passageId}:ambiguous:${decision.places
     .map((place) => place.positionJSON)
     .join("\n")}`;
 }
@@ -1956,6 +2146,7 @@ function choiceSignature(decision: Decision): string {
 function ReviewStep(props: {
   decision: Decision | undefined;
   photo: PhotoDraft | undefined;
+  passage: Passage | undefined;
   index: number;
   count: number;
   keepPhotos: boolean;
@@ -1971,17 +2162,18 @@ function ReviewStep(props: {
 }) {
   const decision = props.decision;
   const photo = props.photo;
+  const passage = props.passage;
   const [choice, setChoice] = useState<ReviewChoice | null>(null);
   const [editingQuote, setEditingQuote] = useState(false);
   const [addingComment, setAddingComment] = useState(
-    () => (photo?.comment.trim().length ?? 0) > 0,
+    () => (passage?.comment.trim().length ?? 0) > 0,
   );
   const quoteRef = useRef<HTMLTextAreaElement>(null);
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const quoteFocus = useRef(false);
   const commentFocus = useRef(false);
   const signature = decision ? choiceSignature(decision) : "";
-  const commentAlreadySet = (photo?.comment.trim().length ?? 0) > 0;
+  const commentAlreadySet = (passage?.comment.trim().length ?? 0) > 0;
   const commentAlreadySetRef = useRef(commentAlreadySet);
   commentAlreadySetRef.current = commentAlreadySet;
   useEffect(() => {
@@ -2001,7 +2193,7 @@ function ReviewStep(props: {
       commentRef.current?.focus();
     }
   }, [addingComment]);
-  if (!decision || !photo) {
+  if (!decision || !photo || !passage) {
     return null;
   }
   const copy = reviewCopy(decision.kind);
@@ -2018,7 +2210,7 @@ function ReviewStep(props: {
       props.onDecide("place", place);
     }
   };
-  const snippet = shortQuote(photo.quote);
+  const snippet = shortQuote(passage.quote);
   return (
     <div class="flex flex-col gap-4">
       <div class="flex items-start gap-4">
@@ -2031,7 +2223,7 @@ function ReviewStep(props: {
         />
         <div class="flex min-w-0 flex-1 flex-col gap-1">
           <p class="text-lg font-semibold">
-            {getString("wizard-mark-count", {
+            {getString("wizard-passage-count", {
               args: { index: props.index + 1, count: props.count },
             })}
           </p>
@@ -2044,7 +2236,7 @@ function ReviewStep(props: {
             <p class="text-sm">
               <span
                 style={{
-                  background: colorWithAlpha(photo.color, 0.6),
+                  background: colorWithAlpha(passage.color, 0.6),
                   borderRadius: "2px",
                   padding: "0 0.15em",
                 }}
@@ -2060,7 +2252,7 @@ function ReviewStep(props: {
                 ref={quoteRef}
                 class="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
                 rows={3}
-                value={photo.quote}
+                value={passage.quote}
                 onInput={(event) =>
                   props.onQuote(
                     (event.currentTarget as HTMLTextAreaElement).value,
@@ -2076,7 +2268,7 @@ function ReviewStep(props: {
                 ref={commentRef}
                 class="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-primary"
                 rows={2}
-                value={photo.comment}
+                value={passage.comment}
                 onInput={(event) =>
                   props.onComment(
                     (event.currentTarget as HTMLTextAreaElement).value,
