@@ -4,17 +4,37 @@ import {
   wordsFromNativePayload,
   type NativeSpace,
 } from "./boxes";
+import { formatNativeFailure, recordOcrDebug } from "./debugLog";
 import { languageSpec } from "./languages";
 import type { OcrWord } from "../photo/types";
 
 const NATIVE_TIMEOUT_MS = 45_000;
 
 type NativeProcess = {
-  stdout: { readString: () => Promise<string> };
-  stderr: { readString: () => Promise<string> };
+  stdout: Pipe;
+  stderr: Pipe;
   wait: () => Promise<{ exitCode?: number } | number>;
   kill: () => Promise<void> | void;
 };
+
+type Pipe = {
+  /** One call returns the first available chunk, or an empty buffer at EOF. */
+  read: () => Promise<ArrayBuffer>;
+};
+
+/** A null-length read stops at the first chunk. A page of boxes does not fit in it. */
+export async function readPipeString(pipe: Pipe): Promise<string> {
+  const decoder = new TextDecoder();
+  let text = "";
+  for (;;) {
+    const buffer = await pipe.read();
+    if (buffer.byteLength === 0) {
+      break;
+    }
+    text += decoder.decode(buffer, { stream: true });
+  }
+  return text + decoder.decode();
+}
 
 export type NativeRecognition =
   | { outcome: "ready"; words: OcrWord[]; engine: NativeSpace }
@@ -28,6 +48,10 @@ export async function recognizeNative(image: {
 }): Promise<NativeRecognition> {
   const spec = languageSpec(image.lang);
   if (!spec) {
+    recordOcrDebug("Native OCR skipped", {
+      reason: "unknown-language",
+      lang: image.lang,
+    });
     return { outcome: "fallback", reason: "unknown-language" };
   }
   const os = hostOS();
@@ -35,10 +59,16 @@ export async function recognizeNative(image: {
   try {
     command = await helperCommand(os, image.path, spec);
   } catch (error) {
-    ztoolkit.log("Native OCR helper unavailable", { error });
+    recordOcrDebug(
+      formatNativeFailure({
+        space: os === "Darwin" ? "vision" : os === "WINNT" ? "windows" : os,
+        error,
+      }),
+    );
     return { outcome: "fallback", reason: "failed" };
   }
   if (!command) {
+    recordOcrDebug("Native OCR skipped", { reason: "platform", os });
     return { outcome: "fallback", reason: "platform" };
   }
   const first = await runHelper(
@@ -50,7 +80,7 @@ export async function recognizeNative(image: {
   if (first.outcome === "ready" || !shouldRetry(first.reason)) {
     return first;
   }
-  ztoolkit.log("Native OCR retry", { reason: first.reason });
+  recordOcrDebug("Native OCR retry", { reason: first.reason });
   return runHelper(command.command, command.args, command.space, image);
 }
 
@@ -130,21 +160,31 @@ async function runHelper(
       payload?.reason === "unsupported-language" ||
       result.exitCode === 2
     ) {
-      return {
-        outcome: "fallback",
-        reason: payload?.reason || "unsupported-language",
-      };
+      const reason = payload?.reason || "unsupported-language";
+      recordOcrDebug(
+        formatNativeFailure({
+          space,
+          exitCode: result.exitCode,
+          reason,
+          detail: payload?.detail,
+          stderr: result.stderr,
+        }),
+      );
+      return { outcome: "fallback", reason };
     }
-    ztoolkit.log("Native OCR failed", {
-      space,
-      exitCode: result.exitCode,
-      reason: payload?.reason,
-      detail: payload?.detail,
-      stderr: result.stderr.trim(),
-    });
+    recordOcrDebug(
+      formatNativeFailure({
+        space,
+        exitCode: result.exitCode,
+        reason: payload?.reason,
+        detail: payload?.detail,
+        stderr: result.stderr,
+        stdout: payload ? "" : result.stdout,
+      }),
+    );
     return { outcome: "fallback", reason: payload?.reason || "failed" };
   } catch (error) {
-    ztoolkit.log("Native OCR failed", { space, error });
+    recordOcrDebug(formatNativeFailure({ space, error }));
     return { outcome: "fallback", reason: "failed" };
   }
 }
@@ -181,8 +221,8 @@ async function runProcess(
   try {
     const finished = await Promise.race([
       Promise.all([
-        proc.stdout.readString(),
-        proc.stderr.readString(),
+        readPipeString(proc.stdout),
+        readPipeString(proc.stderr),
         proc.wait(),
       ]),
       timeout,

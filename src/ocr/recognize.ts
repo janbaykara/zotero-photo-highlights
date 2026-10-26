@@ -1,5 +1,6 @@
 import { config } from "../../package.json";
 import { clusterTesseractWords, keepOcrWord } from "./boxes";
+import { recordOcrDebug } from "./debugLog";
 import { recognizeNative, type NativeRecognition } from "./native";
 import { recognizePaddle } from "./paddle/engine";
 import type { OcrEngine, OcrWord } from "../photo/types";
@@ -147,7 +148,9 @@ export async function recognizeWithFallback(
       log("OCR engine", native.engine);
       return { words: native.words, engine: native.engine };
     }
-    throw new Error(`OCR engine ${engine} did not read the photo`);
+    const reason = native.outcome === "fallback" ? native.reason : "unexpected";
+    log("OCR engine failed", { engine, reason });
+    throw new Error(`OCR engine ${engine} did not read the photo (${reason})`);
   }
   if (engine === "paddle") {
     const words = await steps.paddle();
@@ -178,9 +181,7 @@ export async function recognizeWithFallback(
 }
 
 function log(...args: unknown[]) {
-  if (typeof ztoolkit !== "undefined") {
-    ztoolkit.log(...args);
-  }
+  recordOcrDebug(...args);
 }
 
 async function recognizeOnce(

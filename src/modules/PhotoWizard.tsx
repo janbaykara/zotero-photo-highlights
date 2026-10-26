@@ -12,6 +12,7 @@ import { booleanPrefAtomFamily, stringPrefAtomFamily } from "./prefAtoms";
 import { pickOneBook } from "../utils/itemPicker";
 import { openAnnotationInReader } from "../utils/openAnnotation";
 import { recognizeImage } from "../ocr/recognize";
+import { ocrDebugMark, ocrDebugSince, recordOcrDebug } from "../ocr/debugLog";
 import {
   clearAttachmentTextCache,
   matchQuote,
@@ -204,6 +205,7 @@ export function PhotoWizard(props: {
         ocrEngine: null,
         ocrAutoEngine: null,
         ocrChoice: "auto",
+        ocrDebug: "",
         words: [],
         imageUrl: scaled.url,
         imageWidth: scaled.width,
@@ -227,7 +229,7 @@ export function PhotoWizard(props: {
     setPhotos((current) => [...current, ...drafts]);
     for (const draft of drafts) {
       scanRef.current[draft.id] = { underlines: false, highlights: false };
-      void runOcr(draft, lang, draft.orientToken);
+      void runOcr(draft, lang, draft.orientToken, beginOcr(draft.id));
     }
   };
 
@@ -235,21 +237,62 @@ export function PhotoWizard(props: {
     {},
   );
   const turnChain = useRef<Record<string, Promise<void>>>({});
+  const ocrGen = useRef<Record<string, number>>({});
+  const scaledRef = useRef<
+    Record<
+      string,
+      {
+        imageUrl: string;
+        imageWidth: number;
+        imageHeight: number;
+        turnedPath: string | null;
+        orientToken: number;
+      }
+    >
+  >({});
 
-  const runOcr = async (draft: PhotoDraft, language: string, token: number) => {
+  const beginOcr = (id: string) => {
+    const generation = (ocrGen.current[id] ?? 0) + 1;
+    ocrGen.current[id] = generation;
+    return generation;
+  };
+
+  const runOcr = async (
+    draft: PhotoDraft,
+    language: string,
+    token: number,
+    generation: number,
+  ) => {
+    if (ocrGen.current[draft.id] !== generation) {
+      return;
+    }
+    const debugMark = ocrDebugMark();
+    recordOcrDebug("OCR start", {
+      photo: draft.name,
+      choice: draft.ocrChoice,
+      lang: language,
+      path: draft.scaledPath,
+      width: draft.imageWidth,
+      height: draft.imageHeight,
+    });
     setPhotos((current) =>
       current.map((photo) =>
         photo.id === draft.id && photo.orientToken === token
-          ? { ...photo, ocr: "running", ocrEngine: null }
+          ? { ...photo, ocr: "running", ocrEngine: null, ocrDebug: "" }
           : photo,
       ),
     );
     const win = Zotero.getMainWindow();
     if (!win) {
+      if (ocrGen.current[draft.id] !== generation) {
+        return;
+      }
+      recordOcrDebug("OCR failed", "no main window");
+      const ocrDebug = ocrDebugSince(debugMark);
       setPhotos((current) =>
         current.map((photo) =>
           photo.id === draft.id && photo.orientToken === token
-            ? { ...photo, ocr: "error", ocrEngine: null }
+            ? { ...photo, ocr: "error", ocrEngine: null, ocrDebug }
             : photo,
         ),
       );
@@ -267,6 +310,9 @@ export function PhotoWizard(props: {
         win,
         draft.ocrChoice === "auto" ? null : draft.ocrChoice,
       );
+      if (ocrGen.current[draft.id] !== generation) {
+        return;
+      }
       let detected: ReturnType<typeof detectMarkedPassages> = [];
       const flags = () =>
         scanRef.current[draft.id] ?? { underlines: false, highlights: false };
@@ -293,6 +339,9 @@ export function PhotoWizard(props: {
           ztoolkit.log("Could not detect marks", error);
         }
       }
+      if (ocrGen.current[draft.id] !== generation) {
+        return;
+      }
       const now = flags();
       setPhotos((current) =>
         current.map((photo) =>
@@ -301,6 +350,7 @@ export function PhotoWizard(props: {
                 ...photo,
                 ocr: "done",
                 ocrEngine: recognized.engine,
+                ocrDebug: "",
                 ocrAutoEngine:
                   draft.ocrChoice === "auto"
                     ? recognized.engine
@@ -321,11 +371,15 @@ export function PhotoWizard(props: {
         ),
       );
     } catch (error) {
-      ztoolkit.log("OCR failed", error);
+      recordOcrDebug("OCR failed", error);
+      if (ocrGen.current[draft.id] !== generation) {
+        return;
+      }
+      const ocrDebug = ocrDebugSince(debugMark);
       setPhotos((current) =>
         current.map((photo) =>
           photo.id === draft.id && photo.orientToken === token
-            ? { ...photo, ocr: "error", ocrEngine: null }
+            ? { ...photo, ocr: "error", ocrEngine: null, ocrDebug }
             : photo,
         ),
       );
@@ -343,6 +397,7 @@ export function PhotoWizard(props: {
     };
     const turns = previous.turns + delta;
     const token = previous.token + 1;
+    const generation = beginOcr(id);
     orientRef.current[id] = { turns, token };
     updatePhoto(id, {
       turns,
@@ -355,16 +410,21 @@ export function PhotoWizard(props: {
     const prior = turnChain.current[id] ?? Promise.resolve();
     const job = prior
       .catch(() => undefined)
-      .then(() => applyTurns(photo, turns, token));
+      .then(() => applyTurns(photo, turns, token, generation));
     turnChain.current[id] = job;
   };
 
   const rerunOcr = (id: string, choice?: OcrEngineChoice) => {
     const photo = photosRef.current.find((item) => item.id === id);
-    if (!photo || photo.ocr === "running" || photo.ocr === "pending") {
+    if (!photo) {
       return;
     }
+    const busy = photo.ocr === "running" || photo.ocr === "pending";
     const ocrChoice = choice ?? photo.ocrChoice;
+    if (busy && (choice == null || ocrChoice === photo.ocrChoice)) {
+      return;
+    }
+    const generation = beginOcr(id);
     updatePhoto(id, {
       ocrChoice,
       ocr: "running",
@@ -375,7 +435,10 @@ export function PhotoWizard(props: {
     const prior = turnChain.current[id] ?? Promise.resolve();
     const job = prior
       .catch(() => undefined)
-      .then(async () => {
+      .then(() => {
+        if (ocrGen.current[id] !== generation) {
+          return;
+        }
         const latest = photosRef.current.find((item) => item.id === id);
         if (!latest) {
           return;
@@ -384,19 +447,23 @@ export function PhotoWizard(props: {
           turns: latest.turns,
           token: latest.orientToken,
         };
-        if (record.token !== latest.orientToken) {
-          return;
-        }
-        const token = record.token + 1;
-        orientRef.current[id] = { turns: record.turns, token };
-        updatePhoto(id, {
-          orientToken: token,
-          ocr: "running",
-          ocrEngine: null,
-          words: [],
-          passages: [],
-        });
-        await runOcr({ ...latest, orientToken: token, ocrChoice }, lang, token);
+        const scaled = scaledRef.current[id];
+        const image =
+          scaled && scaled.orientToken === record.token
+            ? scaled
+            : {
+                imageUrl: latest.imageUrl,
+                imageWidth: latest.imageWidth,
+                imageHeight: latest.imageHeight,
+                turnedPath: latest.turnedPath,
+                orientToken: record.token,
+              };
+        void runOcr(
+          { ...latest, ...image, ocrChoice },
+          lang,
+          record.token,
+          generation,
+        );
       });
     turnChain.current[id] = job;
   };
@@ -415,6 +482,7 @@ export function PhotoWizard(props: {
     setPhotos((current) => current.filter((item) => item.id !== id));
     delete scanRef.current[id];
     delete scanGen.current[id];
+    delete scaledRef.current[id];
     const prior = turnChain.current[id] ?? Promise.resolve();
     turnChain.current[id] = prior
       .catch(() => undefined)
@@ -436,13 +504,20 @@ export function PhotoWizard(props: {
     photo: PhotoDraft,
     turns: number,
     token: number,
+    generation: number,
   ) => {
     if (orientRef.current[photo.id]?.token !== token) {
       return;
     }
     const win = Zotero.getMainWindow();
     if (!win) {
-      updatePhoto(photo.id, { ocr: "error", ocrEngine: null });
+      const mark = ocrDebugMark();
+      recordOcrDebug("OCR failed", "no main window");
+      updatePhoto(photo.id, {
+        ocr: "error",
+        ocrEngine: null,
+        ocrDebug: ocrDebugSince(mark),
+      });
       return;
     }
     const quarters = ((turns % 4) + 4) % 4;
@@ -490,6 +565,13 @@ export function PhotoWizard(props: {
       if (previousUrl && previousUrl !== scaled.url) {
         win.URL.revokeObjectURL(previousUrl);
       }
+      scaledRef.current[photo.id] = {
+        imageUrl: scaled.url,
+        imageWidth: scaled.width,
+        imageHeight: scaled.height,
+        turnedPath,
+        orientToken: token,
+      };
       void runOcr(
         {
           ...photo,
@@ -504,13 +586,16 @@ export function PhotoWizard(props: {
         },
         lang,
         token,
+        generation,
       );
     } catch (error) {
-      ztoolkit.log("Could not rotate photo", error);
+      const mark = ocrDebugMark();
+      recordOcrDebug("Could not rotate photo", error);
+      const ocrDebug = ocrDebugSince(mark);
       setPhotos((current) =>
         current.map((item) =>
           item.id === photo.id && item.orientToken === token
-            ? { ...item, ocr: "error", ocrEngine: null }
+            ? { ...item, ocr: "error", ocrEngine: null, ocrDebug }
             : item,
         ),
       );
@@ -1127,7 +1212,7 @@ export function PhotoWizard(props: {
               const next = (event.currentTarget as HTMLSelectElement).value;
               setLang(next);
               for (const photo of photosRef.current) {
-                void runOcr(photo, next, photo.orientToken);
+                void runOcr(photo, next, photo.orientToken, beginOcr(photo.id));
               }
             }}
           >
@@ -1631,7 +1716,6 @@ function engineChoiceLabel(
 function EngineChoice(props: {
   choice: OcrEngineChoice;
   autoEngine: OcrEngine | null;
-  disabled: boolean;
   onChange: (choice: OcrEngineChoice) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1672,7 +1756,6 @@ function EngineChoice(props: {
         aria-label={getString("wizard-ocr-engine")}
         aria-haspopup="listbox"
         aria-expanded={open}
-        disabled={props.disabled}
         onClick={() => setOpen((current) => !current)}
       >
         <span class="min-w-0 truncate">
@@ -2013,6 +2096,7 @@ function MarkStep(props: {
             </button>
           </div>
         </div>
+        <hr class="m-0 w-full shrink-0 border-0 border-t border-border" />
         <div class="flex flex-none flex-col gap-1.5">
           <h2 class="text-xs font-semibold text-secondary">
             {getString("wizard-mark-ocr-heading")}
@@ -2020,7 +2104,6 @@ function MarkStep(props: {
           <EngineChoice
             choice={photo.ocrChoice}
             autoEngine={photo.ocrAutoEngine}
-            disabled={recognizing}
             onChange={(choice) => props.onOcrChoice(photo.id, choice)}
           />
           <button
@@ -2050,11 +2133,15 @@ function MarkStep(props: {
             }
           />
           {photo.ocr === "error" ? (
-            <p class="text-xs text-secondary">
-              {getString("wizard-mark-ocr-failed")}
-            </p>
+            <div class="flex flex-col items-start gap-1">
+              <p class="text-xs text-secondary">
+                {getString("wizard-mark-ocr-failed")}
+              </p>
+              <CopyDebugLogs text={photo.ocrDebug} />
+            </div>
           ) : null}
         </div>
+        <hr class="m-0 w-full shrink-0 border-0 border-t border-border" />
         <div class="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
           <h2 class="text-xs font-semibold text-secondary">
             {getString("wizard-mark-selected")}
@@ -2168,39 +2255,39 @@ function MarkStep(props: {
           >
             {getString("wizard-mark-add")}
           </button>
-        </div>
-        <div
-          class="flex flex-none flex-wrap gap-1.5"
-          role="listbox"
-          aria-label={getString("wizard-mark-color")}
-        >
-          {ZOTERO_ANNOTATION_COLOR_ORDER.map((color) => (
-            <button
-              key={color}
-              type="button"
-              aria-label={getString("wizard-color-swatch", {
-                args: { color },
-              })}
-              class="h-5 w-5 rounded-full border border-border"
-              style={{
-                background: color,
-                outline:
-                  active?.color === color ? "2px solid currentColor" : "none",
-              }}
-              onClick={() => {
-                if (!active || active.color === color) {
-                  return;
-                }
-                props.updatePhoto(photo.id, {
-                  passages: photo.passages.map((passage) =>
-                    passage.id === active.id
-                      ? { ...passage, color, detected: false }
-                      : passage,
-                  ),
-                });
-              }}
-            />
-          ))}
+          <div
+            class="flex flex-none flex-wrap gap-1.5"
+            role="listbox"
+            aria-label={getString("wizard-mark-color")}
+          >
+            {ZOTERO_ANNOTATION_COLOR_ORDER.map((color) => (
+              <button
+                key={color}
+                type="button"
+                aria-label={getString("wizard-color-swatch", {
+                  args: { color },
+                })}
+                class="h-5 w-5 rounded-full border border-border"
+                style={{
+                  background: color,
+                  outline:
+                    active?.color === color ? "2px solid currentColor" : "none",
+                }}
+                onClick={() => {
+                  if (!active || active.color === color) {
+                    return;
+                  }
+                  props.updatePhoto(photo.id, {
+                    passages: photo.passages.map((passage) =>
+                      passage.id === active.id
+                        ? { ...passage, color, detected: false }
+                        : passage,
+                    ),
+                  });
+                }}
+              />
+            ))}
+          </div>
         </div>
       </aside>
     </div>
@@ -2770,6 +2857,39 @@ function placeCardStyle(selected: boolean): string {
     "color:inherit",
     "cursor:pointer",
   ].join(";");
+}
+
+function CopyDebugLogs(props: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      class="self-start px-2 py-1"
+      onClick={() => {
+        copyDebugLogs(props.text);
+        setCopied(true);
+      }}
+    >
+      {getString(copied ? "wizard-mark-logs-copied" : "wizard-mark-copy-logs")}
+    </button>
+  );
+}
+
+function copyDebugLogs(text: string): void {
+  const payload = text.trim() || getString("wizard-mark-logs-empty");
+  try {
+    const classes = Components.classes as unknown as Record<
+      string,
+      {
+        getService: (iface: unknown) => { copyString: (value: string) => void };
+      }
+    >;
+    classes["@mozilla.org/widget/clipboardhelper;1"]
+      .getService(Ci.nsIClipboardHelper)
+      .copyString(payload);
+  } catch (error) {
+    recordOcrDebug("Could not copy debug logs", error);
+  }
 }
 
 function DetectToggles(props: {

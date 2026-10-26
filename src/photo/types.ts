@@ -64,6 +64,8 @@ export type PhotoDraft = {
   detectUnderlines: boolean;
   /** Scan this photo for highlighter. Off unless the checkbox is set. */
   detectHighlights: boolean;
+  /** Lines from the last failed recognition, for Copy debug logs. */
+  ocrDebug: string;
   bookId: number | null;
   bookTitle: string;
   kept: boolean;

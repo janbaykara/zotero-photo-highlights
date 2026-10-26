@@ -8,6 +8,7 @@ import {
   wordsFromNativePayload,
 } from "../src/ocr/boxes";
 import { pickRecognitionLanguage } from "../src/ocr/languages";
+import { readPipeString } from "../src/ocr/native";
 
 const VISION_LANGS = [
   "en-US",
@@ -149,6 +150,42 @@ describe("native OCR", function () {
         parseNativePayload('note\n{"ok":false,"reason":"no-text"}\n')?.reason,
         "no-text",
       );
+    });
+
+    it("joins pipe chunks until the pipe closes", async function () {
+      const payload = JSON.stringify({
+        ok: true,
+        width: 2400,
+        height: 1800,
+        lines: [
+          {
+            words: [
+              {
+                text: "South",
+                confidence: 1,
+                x: 0.4,
+                y: 0.8,
+                w: 0.04,
+                h: 0.03,
+              },
+              { text: "café", confidence: 1, x: 0.5, y: 0.8, w: 0.04, h: 0.03 },
+            ],
+          },
+        ],
+      });
+      const bytes = new TextEncoder().encode(payload);
+      const split = 11;
+      const chunks = [bytes.slice(0, split), bytes.slice(split)];
+      let index = 0;
+      const text = await readPipeString({
+        read: async () => {
+          const next = chunks[index];
+          index += 1;
+          return next ? next.buffer : new ArrayBuffer(0);
+        },
+      });
+      assert.equal(parseNativePayload(text)?.ok, true);
+      assert.equal(text, payload);
     });
   });
 
