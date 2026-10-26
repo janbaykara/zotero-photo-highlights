@@ -10,7 +10,17 @@ export type OcrWord = {
 
 export type OcrState = "pending" | "running" | "done" | "error";
 
-export type OcrEngine = "vision" | "windows" | "tesseract";
+export type OcrEngine = "vision" | "windows" | "paddle" | "tesseract";
+
+/** `auto` follows the usual fallback. Any other value reads with only that engine. */
+export type OcrEngineChoice = "auto" | OcrEngine;
+
+export const OCR_ENGINES: OcrEngine[] = [
+  "vision",
+  "windows",
+  "paddle",
+  "tesseract",
+];
 
 export type Passage = {
   id: string;
@@ -41,12 +51,16 @@ export type PhotoDraft = {
   ocr: OcrState;
   /** Set when recognition finishes. Cleared while a new pass is running. */
   ocrEngine: OcrEngine | null;
+  /** Engine the automatic fallback last resolved. Stays put when a photo is forced onto one engine. */
+  ocrAutoEngine: OcrEngine | null;
+  /** How the next recognition of this photo chooses an engine. */
+  ocrChoice: OcrEngineChoice;
   words: OcrWord[];
   imageUrl: string;
   imageWidth: number;
   imageHeight: number;
   passages: Passage[];
-  /** Scan this photo for pen underlines. On unless the checkbox is cleared. */
+  /** Scan this photo for pen underlines. Off unless the checkbox is set. */
   detectUnderlines: boolean;
   /** Scan this photo for highlighter. Off unless the checkbox is set. */
   detectHighlights: boolean;

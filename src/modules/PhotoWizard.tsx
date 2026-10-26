@@ -44,8 +44,10 @@ import { deleteFile, importPhoto, saveHighlight } from "../photo/save";
 import { bakeExifOrientation, writeQuarterTurns } from "../photo/orient";
 import { formatPhotoWhen, readPhotoTakenAt } from "../photo/takenAt";
 import {
+  OCR_ENGINES,
   OCR_LANGUAGES,
   type OcrEngine,
+  type OcrEngineChoice,
   type OcrWord,
   type Passage,
   type PhotoDraft,
@@ -200,12 +202,14 @@ export function PhotoWizard(props: {
         scaledPath,
         ocr: "pending",
         ocrEngine: null,
+        ocrAutoEngine: null,
+        ocrChoice: "auto",
         words: [],
         imageUrl: scaled.url,
         imageWidth: scaled.width,
         imageHeight: scaled.height,
         passages: [],
-        detectUnderlines: true,
+        detectUnderlines: false,
         detectHighlights: false,
         bookId: null,
         bookTitle: "",
@@ -222,7 +226,7 @@ export function PhotoWizard(props: {
     }
     setPhotos((current) => [...current, ...drafts]);
     for (const draft of drafts) {
-      scanRef.current[draft.id] = { underlines: true, highlights: false };
+      scanRef.current[draft.id] = { underlines: false, highlights: false };
       void runOcr(draft, lang, draft.orientToken);
     }
   };
@@ -261,10 +265,11 @@ export function PhotoWizard(props: {
         },
         language,
         win,
+        draft.ocrChoice === "auto" ? null : draft.ocrChoice,
       );
       let detected: ReturnType<typeof detectMarkedPassages> = [];
       const flags = () =>
-        scanRef.current[draft.id] ?? { underlines: true, highlights: false };
+        scanRef.current[draft.id] ?? { underlines: false, highlights: false };
       if (flags().underlines || flags().highlights) {
         try {
           const pixels = await readImagePixels(
@@ -296,6 +301,10 @@ export function PhotoWizard(props: {
                 ...photo,
                 ocr: "done",
                 ocrEngine: recognized.engine,
+                ocrAutoEngine:
+                  draft.ocrChoice === "auto"
+                    ? recognized.engine
+                    : photo.ocrAutoEngine,
                 words: recognized.words,
                 detectUnderlines: now.underlines,
                 detectHighlights: now.highlights,
@@ -350,12 +359,14 @@ export function PhotoWizard(props: {
     turnChain.current[id] = job;
   };
 
-  const rerunOcr = (id: string) => {
+  const rerunOcr = (id: string, choice?: OcrEngineChoice) => {
     const photo = photosRef.current.find((item) => item.id === id);
     if (!photo || photo.ocr === "running" || photo.ocr === "pending") {
       return;
     }
+    const ocrChoice = choice ?? photo.ocrChoice;
     updatePhoto(id, {
+      ocrChoice,
       ocr: "running",
       ocrEngine: null,
       words: [],
@@ -385,7 +396,7 @@ export function PhotoWizard(props: {
           words: [],
           passages: [],
         });
-        await runOcr({ ...latest, orientToken: token }, lang, token);
+        await runOcr({ ...latest, orientToken: token, ocrChoice }, lang, token);
       });
     turnChain.current[id] = job;
   };
@@ -487,6 +498,9 @@ export function PhotoWizard(props: {
           imageHeight: scaled.height,
           orientToken: token,
           turnedPath,
+          ocrChoice:
+            photosRef.current.find((item) => item.id === photo.id)?.ocrChoice ??
+            photo.ocrChoice,
         },
         lang,
         token,
@@ -512,7 +526,7 @@ export function PhotoWizard(props: {
   };
 
   const readFlags = (id: string) =>
-    scanRef.current[id] ?? { underlines: true, highlights: false };
+    scanRef.current[id] ?? { underlines: false, highlights: false };
 
   const detectOnPhoto = async (photo: PhotoDraft, words: OcrWord[]) => {
     const win = Zotero.getMainWindow();
@@ -1075,28 +1089,6 @@ export function PhotoWizard(props: {
     setStep(rest.length ? "review" : "summary");
   };
 
-  const skipCurrentPhoto = () => {
-    const photo = photos[markIndex];
-    if (!photo || photo.skipped) {
-      return;
-    }
-    const batch = photos.map((item) =>
-      item.id === photo.id ? { ...item, skipped: true } : item,
-    );
-    updatePhoto(photo.id, { skipped: true });
-    if (fromReviewRef.current) {
-      fromReviewRef.current = false;
-      void abandonReviewedPhoto(photo);
-      return;
-    }
-    const next = neighborIndex(batch, markIndex, 1);
-    if (next >= 0) {
-      setMarkIndex(next);
-      return;
-    }
-    void goReview(batch);
-  };
-
   return (
     <div
       class="box-border flex h-full flex-col gap-5 px-8 py-6 text-sm text-primary"
@@ -1156,9 +1148,7 @@ export function PhotoWizard(props: {
           <AddStep
             photos={photos}
             dragging={draggingFiles}
-            onRotate={rotatePhoto}
             onRemove={removePhoto}
-            onDetect={setDetect}
             onChoose={async (win) => {
               try {
                 await addPaths(
@@ -1184,8 +1174,8 @@ export function PhotoWizard(props: {
               onActivePassage={setMarkPassageId}
               onRotate={rotatePhoto}
               onRerunOcr={rerunOcr}
+              onOcrChoice={rerunOcr}
               onDetect={setDetect}
-              onSkip={skipCurrentPhoto}
             />
           </div>
         ) : null}
@@ -1515,13 +1505,7 @@ function AddStep(props: {
   photos: PhotoDraft[];
   dragging: boolean;
   onChoose: (win: Window) => Promise<void>;
-  onRotate: (id: string, delta: number) => void;
   onRemove: (id: string) => void;
-  onDetect: (
-    id: string,
-    kind: "underlines" | "highlights",
-    enabled: boolean,
-  ) => void;
 }) {
   const empty = props.photos.length === 0;
   return (
@@ -1549,75 +1533,48 @@ function AddStep(props: {
         {getString("wizard-add-choose")}
       </button>
       {empty ? null : (
-        <ul class="mt-2 flex w-full min-w-0 max-w-full flex-col">
+        <ul class="mt-2 grid w-full grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3">
           {props.photos.map((photo) => (
-            <li
-              key={photo.id}
-              class="flex items-center gap-3 border-t border-border py-2.5 text-left"
-            >
-              <img
-                src={photo.imageUrl}
-                alt={photo.name}
-                draggable={false}
-                class="shrink-0 rounded border border-border bg-background-toolbar object-contain"
-                style="width:11rem;height:11rem"
-              />
-              <div class="min-w-0 flex-1">
-                <div class="truncate font-medium">{photoLabel(photo)}</div>
-                {photo.takenAt != null ? (
-                  <div class="truncate text-xs text-secondary">
-                    {photo.name}
-                  </div>
-                ) : null}
-                <div
-                  class={`text-xs ${photo.ocr === "done" ? "" : "text-secondary"}`}
-                  style={
-                    photo.ocr === "done"
-                      ? "color:var(--accent-green)"
-                      : undefined
-                  }
-                >
-                  {ocrLabel(photo.ocr, photo.ocrEngine)}
-                </div>
-                <DetectToggles
-                  underlines={photo.detectUnderlines}
-                  highlights={photo.detectHighlights}
-                  onUnderlines={(enabled) =>
-                    props.onDetect(photo.id, "underlines", enabled)
-                  }
-                  onHighlights={(enabled) =>
-                    props.onDetect(photo.id, "highlights", enabled)
-                  }
+            <li key={photo.id} class="flex min-w-0 flex-col gap-1 text-left">
+              <div class="relative">
+                <img
+                  src={photo.imageUrl}
+                  alt={photo.name}
+                  draggable={false}
+                  class="w-full rounded border border-border bg-background-toolbar object-contain"
+                  style="height:7rem"
                 />
-              </div>
-              <div class="flex shrink-0 gap-1">
                 <button
                   type="button"
-                  class="px-2 py-1"
-                  title={getString("wizard-rotate-left")}
-                  aria-label={getString("wizard-rotate-left")}
-                  onClick={() => props.onRotate(photo.id, -1)}
-                >
-                  <RotateIcon direction="left" />
-                </button>
-                <button
-                  type="button"
-                  class="px-2 py-1"
-                  title={getString("wizard-rotate-right")}
-                  aria-label={getString("wizard-rotate-right")}
-                  onClick={() => props.onRotate(photo.id, 1)}
-                >
-                  <RotateIcon direction="right" />
-                </button>
-                <button
-                  type="button"
-                  class="px-2 py-1"
+                  class="absolute top-1 right-1 px-1.5 py-1"
                   title={getString("wizard-add-remove")}
                   aria-label={getString("wizard-add-remove")}
                   onClick={() => props.onRemove(photo.id)}
                 >
                   <RemoveIcon />
                 </button>
+              </div>
+              <div class="truncate text-xs font-medium">
+                {photoLabel(photo)}
+              </div>
+              {photo.takenAt != null ? (
+                <div class="truncate text-xs text-secondary">{photo.name}</div>
+              ) : null}
+              <div
+                class={`flex items-start gap-1 text-xs ${photo.ocr === "done" ? "" : "text-secondary"}`}
+                style={
+                  photo.ocr === "done" ? "color:var(--accent-green)" : undefined
+                }
+              >
+                {photo.ocr === "running" || photo.ocr === "pending" ? (
+                  <span
+                    class="photo-highlights-spinner box-border mt-0.5 size-3 shrink-0 rounded-full border-2 border-quarternary border-t-primary"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span class="min-w-0">
+                  {ocrLabel(photo.ocr, photo.ocrEngine)}
+                </span>
               </div>
             </li>
           ))}
@@ -1647,7 +1604,133 @@ function ocrLabel(state: PhotoDraft["ocr"], engine: OcrEngine | null): string {
 function ocrEngineKey(engine: OcrEngine): FluentMessageId {
   if (engine === "vision") return "wizard-ocr-engine-vision";
   if (engine === "windows") return "wizard-ocr-engine-windows";
+  if (engine === "paddle") return "wizard-ocr-engine-paddle";
   return "wizard-ocr-engine-tesseract";
+}
+
+function engineChoiceLabel(
+  choice: OcrEngineChoice,
+  autoEngine: OcrEngine | null,
+): string {
+  if (choice !== "auto") {
+    return getString(ocrEngineKey(choice));
+  }
+  if (!autoEngine) {
+    return getString("wizard-ocr-engine-auto-pending");
+  }
+  return getString("wizard-ocr-engine-auto", {
+    args: { engine: getString(ocrEngineKey(autoEngine)) },
+  });
+}
+
+/**
+ * The engine list is drawn in the column. A native select popup does not
+ * open in this Firefox dialog, and the mark pane clips anything that floats
+ * out of it.
+ */
+function EngineChoice(props: {
+  choice: OcrEngineChoice;
+  autoEngine: OcrEngine | null;
+  disabled: boolean;
+  onChange: (choice: OcrEngineChoice) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const doc = root.current?.ownerDocument;
+    if (!doc) {
+      return;
+    }
+    const onPointer = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && root.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    doc.addEventListener("pointerdown", onPointer, true);
+    doc.addEventListener("keydown", onKey);
+    return () => {
+      doc.removeEventListener("pointerdown", onPointer, true);
+      doc.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const options: OcrEngineChoice[] = ["auto", ...OCR_ENGINES];
+  return (
+    <div class="flex flex-col gap-1" ref={root}>
+      <button
+        type="button"
+        class="flex w-full items-center justify-between gap-2 px-2 py-1 text-left text-xs"
+        aria-label={getString("wizard-ocr-engine")}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={props.disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span class="min-w-0 truncate">
+          {engineChoiceLabel(props.choice, props.autoEngine)}
+        </span>
+        <svg
+          viewBox="0 0 12 12"
+          width="12"
+          height="12"
+          aria-hidden="true"
+          class="shrink-0"
+        >
+          <path
+            d="M2 4l4 4 4-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
+      {open ? (
+        <ul
+          role="listbox"
+          aria-label={getString("wizard-ocr-engine")}
+          class="flex flex-col rounded-md border border-border bg-background py-1"
+        >
+          {options.map((choice) => {
+            const selected = choice === props.choice;
+            return (
+              <li key={choice} role="presentation">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  class={`w-full px-2 py-1 text-left text-xs ${
+                    selected ? "bg-background-toolbar" : "bg-transparent"
+                  }`}
+                  style="appearance:none;-moz-appearance:none"
+                  onClick={() => {
+                    setOpen(false);
+                    if (!selected) {
+                      props.onChange(choice);
+                    }
+                  }}
+                >
+                  {engineChoiceLabel(
+                    choice,
+                    choice === "auto" ? props.autoEngine : null,
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function LinkStep(props: {
@@ -1743,12 +1826,12 @@ function MarkStep(props: {
   onActivePassage: (id: string | null) => void;
   onRotate: (id: string, delta: number) => void;
   onRerunOcr: (id: string) => void;
+  onOcrChoice: (id: string, choice: OcrEngineChoice) => void;
   onDetect: (
     id: string,
     kind: "underlines" | "highlights",
     enabled: boolean,
   ) => void;
-  onSkip: () => void;
 }) {
   const photo = props.photo;
   const drag = useRef<{
@@ -1815,6 +1898,7 @@ function MarkStep(props: {
     props.updatePhoto(photo.id, { passages: added.passages });
     editPassage(added.id);
   };
+  const recognizing = photo.ocr === "running" || photo.ocr === "pending";
   return (
     <div class="flex h-full min-h-0 min-w-0 items-stretch gap-4 overflow-hidden">
       <div
@@ -1908,16 +1992,6 @@ function MarkStep(props: {
           {photo.takenAt != null ? (
             <p class="text-sm font-medium">{formatPhotoWhen(photo.takenAt)}</p>
           ) : null}
-          <DetectToggles
-            underlines={photo.detectUnderlines}
-            highlights={photo.detectHighlights}
-            onUnderlines={(enabled) =>
-              props.onDetect(photo.id, "underlines", enabled)
-            }
-            onHighlights={(enabled) =>
-              props.onDetect(photo.id, "highlights", enabled)
-            }
-          />
           <div class="flex items-center gap-1">
             <button
               type="button"
@@ -1938,36 +2012,53 @@ function MarkStep(props: {
               <RotateIcon direction="right" />
             </button>
           </div>
-          <div class="flex items-center gap-1">
-            <button
-              type="button"
-              class="shrink-0 px-2 py-1"
-              disabled={photo.ocr === "running" || photo.ocr === "pending"}
-              onClick={() => props.onRerunOcr(photo.id)}
-            >
-              {getString("wizard-mark-rerecognize")}
-            </button>
-            {photo.ocr === "done" && photo.ocrEngine ? (
-              <span class="whitespace-nowrap text-xs text-secondary">
-                {getString(ocrEngineKey(photo.ocrEngine))}
-              </span>
-            ) : null}
-          </div>
         </div>
-        {photo.ocr === "running" || photo.ocr === "pending" ? (
-          <p class="flex-none text-xs text-secondary">
-            {getString("wizard-mark-ocr")}
-          </p>
-        ) : null}
-        {photo.ocr === "error" ? (
-          <p class="flex-none text-xs text-secondary">
-            {getString("wizard-mark-ocr-failed")}
-          </p>
-        ) : null}
+        <div class="flex flex-none flex-col gap-1.5">
+          <h2 class="text-xs font-semibold text-secondary">
+            {getString("wizard-mark-ocr-heading")}
+          </h2>
+          <EngineChoice
+            choice={photo.ocrChoice}
+            autoEngine={photo.ocrAutoEngine}
+            disabled={recognizing}
+            onChange={(choice) => props.onOcrChoice(photo.id, choice)}
+          />
+          <button
+            type="button"
+            class="flex w-full items-center justify-center gap-2 px-2 py-1"
+            disabled={recognizing}
+            onClick={() => props.onRerunOcr(photo.id)}
+          >
+            {recognizing ? (
+              <span
+                class="photo-highlights-spinner box-border size-3.5 shrink-0 rounded-full border-2 border-quarternary border-t-primary"
+                aria-hidden="true"
+              />
+            ) : null}
+            {recognizing
+              ? getString("wizard-mark-ocr")
+              : getString("wizard-mark-rerecognize")}
+          </button>
+          <DetectToggles
+            underlines={photo.detectUnderlines}
+            highlights={photo.detectHighlights}
+            onUnderlines={(enabled) =>
+              props.onDetect(photo.id, "underlines", enabled)
+            }
+            onHighlights={(enabled) =>
+              props.onDetect(photo.id, "highlights", enabled)
+            }
+          />
+          {photo.ocr === "error" ? (
+            <p class="text-xs text-secondary">
+              {getString("wizard-mark-ocr-failed")}
+            </p>
+          ) : null}
+        </div>
         <div class="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
-          <p class="text-xs text-secondary">
+          <h2 class="text-xs font-semibold text-secondary">
             {getString("wizard-mark-selected")}
-          </p>
+          </h2>
           <div class="flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
             {visible.length === 0 ? (
               <div
@@ -2111,13 +2202,6 @@ function MarkStep(props: {
             />
           ))}
         </div>
-        <button
-          type="button"
-          class="flex-none self-start"
-          onClick={props.onSkip}
-        >
-          {getString("wizard-mark-skip")}
-        </button>
       </aside>
     </div>
   );
@@ -2695,7 +2779,7 @@ function DetectToggles(props: {
   onHighlights: (enabled: boolean) => void;
 }) {
   return (
-    <div class="flex flex-col gap-1">
+    <div class="grid grid-cols-2 gap-x-2 gap-y-1">
       <DetectToggle
         label="wizard-detect-underlines"
         checked={props.underlines}
@@ -2716,15 +2800,17 @@ function DetectToggle(props: {
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label class="flex items-center gap-2 text-xs text-secondary">
+    <label class="flex min-w-0 items-center gap-1 text-[0.6875rem] leading-tight text-secondary">
       <input
         type="checkbox"
+        class="m-0 shrink-0"
+        style="width:0.75rem;height:0.75rem"
         checked={props.checked}
         onChange={(event) =>
           props.onChange((event.currentTarget as HTMLInputElement).checked)
         }
       />
-      {getString(props.label)}
+      <span class="min-w-0">{getString(props.label)}</span>
     </label>
   );
 }

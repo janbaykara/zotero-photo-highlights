@@ -1,6 +1,7 @@
 import { config } from "../../package.json";
 import { clusterTesseractWords, keepOcrWord } from "./boxes";
-import { recognizeNative } from "./native";
+import { recognizeNative, type NativeRecognition } from "./native";
+import { recognizePaddle } from "./paddle/engine";
 import type { OcrEngine, OcrWord } from "../photo/types";
 
 type TesseractWord = {
@@ -106,23 +107,80 @@ export async function recognizeImage(
   image: { url: string; path: string; width: number; height: number },
   lang: string,
   win: Window,
+  choice?: OcrEngine | null,
 ): Promise<{ words: OcrWord[]; engine: OcrEngine }> {
-  const native = await recognizeNative({
-    path: image.path,
-    lang,
-    width: image.width,
-    height: image.height,
-  });
+  return recognizeWithFallback(
+    {
+      native: () =>
+        recognizeNative({
+          path: image.path,
+          lang,
+          width: image.width,
+          height: image.height,
+        }),
+      paddle: () =>
+        recognizePaddle(
+          { url: image.url, width: image.width, height: image.height },
+          lang,
+          win,
+        ),
+      tesseract: async () => {
+        const langPath = await ensureOcrLanguage(lang, win);
+        return recognizeOnce(image.url, lang, langPath, win);
+      },
+    },
+    choice,
+  );
+}
+
+export async function recognizeWithFallback(
+  steps: {
+    native: () => Promise<NativeRecognition>;
+    paddle: () => Promise<OcrWord[]>;
+    tesseract: () => Promise<OcrWord[]>;
+  },
+  engine?: OcrEngine | null,
+): Promise<{ words: OcrWord[]; engine: OcrEngine }> {
+  if (engine === "vision" || engine === "windows") {
+    const native = await steps.native();
+    if (native.outcome === "ready" && native.engine === engine) {
+      log("OCR engine", native.engine);
+      return { words: native.words, engine: native.engine };
+    }
+    throw new Error(`OCR engine ${engine} did not read the photo`);
+  }
+  if (engine === "paddle") {
+    const words = await steps.paddle();
+    log("OCR engine", "paddle");
+    return { words, engine: "paddle" };
+  }
+  if (engine === "tesseract") {
+    log("OCR engine", "tesseract");
+    return { words: await steps.tesseract(), engine: "tesseract" };
+  }
+  const native = await steps.native();
   if (native.outcome === "ready") {
-    ztoolkit.log("OCR engine", native.engine);
+    log("OCR engine", native.engine);
     return { words: native.words, engine: native.engine };
   }
-  ztoolkit.log("OCR engine", { engine: "tesseract", reason: native.reason });
-  const langPath = await ensureOcrLanguage(lang, win);
-  return {
-    words: await recognizeOnce(image.url, lang, langPath, win),
-    engine: "tesseract",
-  };
+  log("OCR engine", { engine: "paddle", reason: native.reason });
+  try {
+    const words = await steps.paddle();
+    if (words.length) {
+      log("OCR engine", "paddle");
+      return { words, engine: "paddle" };
+    }
+    log("OCR engine", { engine: "tesseract", reason: "no-text" });
+  } catch (error) {
+    log("OCR engine", { engine: "tesseract", reason: "paddle-failed", error });
+  }
+  return { words: await steps.tesseract(), engine: "tesseract" };
+}
+
+function log(...args: unknown[]) {
+  if (typeof ztoolkit !== "undefined") {
+    ztoolkit.log(...args);
+  }
 }
 
 async function recognizeOnce(

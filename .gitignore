@@ -19,6 +19,9 @@ logs
 # Copied from @techstark/opencv-js by scripts/copy-opencv.mjs
 addon/content/opencv/
 
+# Copied from onnxruntime-web by scripts/copy-ort.mjs
+addon/content/ocr/ort/
+
 # Docs site (Astro)
 website/dist
 website/.astro
