@@ -187,12 +187,13 @@ async function recognizeCrop(
     held.fixedWidth ?? undefined,
   );
   try {
-    const output = await runSession(win, held.rec as OrtSession, ort, first.data, [
-      1,
-      3,
-      REC_HEIGHT,
-      first.width,
-    ]);
+    const output = await runSession(
+      win,
+      held.rec as OrtSession,
+      ort,
+      first.data,
+      [1, 3, REC_HEIGHT, first.width],
+    );
     return decoded(output, first.width, first.contentWidth);
   } catch (error) {
     if (held.fixedWidth) throw error;
@@ -203,12 +204,13 @@ async function recognizeCrop(
       REC_HEIGHT,
       FIXED_REC_WIDTH,
     );
-    const output = await runSession(win, held.rec as OrtSession, ort, fixed.data, [
-      1,
-      3,
-      REC_HEIGHT,
-      FIXED_REC_WIDTH,
-    ]);
+    const output = await runSession(
+      win,
+      held.rec as OrtSession,
+      ort,
+      fixed.data,
+      [1, 3, REC_HEIGHT, FIXED_REC_WIDTH],
+    );
     held.fixedWidth = FIXED_REC_WIDTH;
     return decoded(output, fixed.width, fixed.contentWidth);
   }

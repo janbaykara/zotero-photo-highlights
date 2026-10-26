@@ -29,7 +29,7 @@
     "lint:check": "prettier --check . && eslint .",
     "lint:fix": "prettier --write . && eslint . --fix",
     "release": "pnpm lint:check && NODE_ENV=production zotero-plugin release",
-    "test": "zotero-plugin test --no-watch",
+    "test": "node scripts/copy-opencv.mjs && zotero-plugin test --no-watch",
     "update-deps": "pnpm update --save"
   },
   "dependencies": {

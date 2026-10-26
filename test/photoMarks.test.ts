@@ -1,5 +1,5 @@
-import { createRequire } from "node:module";
 import { assert } from "chai";
+import { config } from "../package.json";
 import { detectMarkedPassages, type RgbaImage } from "../src/photo/marks";
 import type { OpenCv } from "../src/photo/opencv";
 import type { OcrWord } from "../src/photo/types";
@@ -235,9 +235,7 @@ describe("marked passages", function () {
 
     before(async function () {
       this.timeout(20000);
-      const nodeRequire = createRequire(`${process.cwd()}/package.json`);
-      const loaded = nodeRequire("@techstark/opencv-js") as Promise<OpenCv>;
-      cv = typeof loaded.then === "function" ? await loaded : loaded;
+      cv = await loadOpenCvForTests();
     });
 
     it("splits yellow and blue washes into two passages", function () {
@@ -426,4 +424,33 @@ function glyphs(image: RgbaImage, word: OcrWord): void {
   for (let index = 0; index < 3; index++) {
     fillRect(image, word.x0 + 4 + index * 8, word.y0 + 2, 2, height - 6, INK);
   }
+}
+
+/** The test page is a Zotero chrome window, so OpenCV loads the same way as the plugin. */
+async function loadOpenCvForTests(): Promise<OpenCv> {
+  const win = window as Window & {
+    cv?: OpenCv | Promise<OpenCv>;
+    define?: unknown;
+  };
+  const previousDefine = win.define;
+  win.define = undefined;
+  try {
+    Services.scriptloader.loadSubScript(
+      `chrome://${config.addonRef}/content/opencv/opencv.js`,
+      win,
+    );
+  } finally {
+    if (previousDefine === undefined) {
+      delete win.define;
+    } else {
+      win.define = previousDefine;
+    }
+  }
+  const created = win.cv;
+  if (!created) {
+    throw new Error("OpenCV did not load");
+  }
+  return typeof (created as Promise<OpenCv>).then === "function"
+    ? await created
+    : created;
 }
