@@ -1,5 +1,9 @@
-import { detectHighlightPassages } from "./highlights";
-import type { OpenCv } from "./opencv";
+import {
+  chromaDistance,
+  detectHighlightPassages,
+  snapMarkColor,
+  toLab,
+} from "./highlights";
 import type { OcrWord } from "./types";
 
 export type RgbaImage = {
@@ -18,20 +22,22 @@ export type DetectedPassage = {
 };
 
 const DEFAULT_COLOR = "#ffd400";
+const DARK_MARGIN = 26;
+const CHROMA_STRONG = 7.2;
+const CHROMA_WEAK = 5.5;
 
 type LineWord = { index: number; word: OcrWord };
 
-type Stroke = { minX: number; maxX: number; top: number };
+type UnderlineHit = { rank: 0 | 1 | 2; color: string };
 
 /**
  * Find pen underlines and, when asked, highlighter behind the words.
- * Each OCR line is searched once. A word that is both highlighted and underlined
- * stays with the highlighter passage.
+ * Each word is scored on its own box, so a tilted photo still lines up.
+ * A word that is both highlighted and underlined stays with the highlighter.
  */
 export function detectMarkedPassages(
   image: RgbaImage,
   words: OcrWord[],
-  cv?: OpenCv | null,
   scan?: { underlines?: boolean; highlights?: boolean },
 ): DetectedPassage[] {
   if (!image.width || !image.height || !words.length) {
@@ -41,16 +47,15 @@ export function detectMarkedPassages(
     return [];
   }
   const underlines = scan?.underlines !== false;
-  const highlights = scan ? scan.highlights === true : Boolean(cv);
+  const highlights = scan?.highlights === true;
   const passages: DetectedPassage[] = [];
   for (const line of groupLines(words)) {
-    const highlighted =
-      highlights && cv
-        ? safeHighlights(cv, image, line).map((span) => ({
-            ...span,
-            kind: "highlight" as const,
-          }))
-        : [];
+    const highlighted = highlights
+      ? safeHighlights(image, line).map((span) => ({
+          ...span,
+          kind: "highlight" as const,
+        }))
+      : [];
     const claimed = new Set(highlighted.flatMap((span) => span.words));
     const underlined = underlines ? detectLine(image, line, claimed) : [];
     passages.push(...byReadingOrder(line, [...highlighted, ...underlined]));
@@ -59,13 +64,11 @@ export function detectMarkedPassages(
 }
 
 function safeHighlights(
-  cv: OpenCv,
   image: RgbaImage,
   line: LineWord[],
 ): { words: number[]; color: string }[] {
   try {
     return detectHighlightPassages(
-      cv,
       image,
       line.map((entry) => ({ index: entry.index, ...entry.word })),
     );
@@ -113,389 +116,293 @@ function detectLine(
   line: LineWord[],
   claimed: Set<number>,
 ): DetectedPassage[] {
-  const usable = line.filter((entry) => {
-    const width = entry.word.x1 - entry.word.x0;
-    const height = entry.word.y1 - entry.word.y0;
-    return width >= 2 && height >= 2;
+  const hits = line.map((entry) =>
+    claimed.has(entry.index)
+      ? { rank: 0 as const, color: DEFAULT_COLOR }
+      : underlineHit(image, entry.word),
+  );
+  const kept = hits.map((hit, index) => {
+    const before = hits[index - 1]?.rank === 2;
+    const after = hits[index + 1]?.rank === 2;
+    if (hit.rank === 2) {
+      const word = line[index]?.word;
+      const narrow = !!word && word.x1 - word.x0 < 34;
+      // A lone "A" or "I" is a shadow. The same word stays when the stroke
+      // continues into a neighbor, including another short word.
+      return !narrow || before || after;
+    }
+    if (hit.rank !== 1) {
+      return false;
+    }
+    return before && after;
   });
-  if (!usable.length) {
-    return [];
-  }
-  const em = percentile(
-    usable.map((entry) => entry.word.y1 - entry.word.y0),
-    0.5,
-  );
-  const baseline = percentile(
-    usable.map((entry) => entry.word.y1),
-    0.35,
-  );
-  const band = {
-    left: clamp(
-      Math.floor(Math.min(...usable.map((entry) => entry.word.x0))),
-      0,
-      image.width,
-    ),
-    right: clamp(
-      Math.ceil(Math.max(...usable.map((entry) => entry.word.x1))),
-      0,
-      image.width,
-    ),
-    top: clamp(Math.floor(baseline - em * 0.2), 0, image.height),
-    bottom: clamp(Math.ceil(baseline + em * 0.55), 0, image.height),
-  };
-  if (band.right - band.left < 2 || band.bottom - band.top < 2) {
-    return [];
-  }
-  const width = band.right - band.left;
-  const height = band.bottom - band.top;
-  const ink = strokeMask(image, band, width, height, em);
-  const strokes = mergeStrokes(
-    components(ink, width, height, band).filter((stroke) =>
-      isUnderline(stroke, em, band.top),
-    ),
-    em,
-  );
   const passages: DetectedPassage[] = [];
-  for (const stroke of strokes) {
-    const selected = usable.filter((entry) => {
-      if (claimed.has(entry.index)) {
-        return false;
+  let current: number[] = [];
+  let color = DEFAULT_COLOR;
+  const flush = () => {
+    if (!current.length) {
+      return;
+    }
+    passages.push({ words: current, color, kind: "underline" });
+    current = [];
+  };
+  line.forEach((entry, index) => {
+    if (!kept[index] || claimed.has(entry.index)) {
+      flush();
+      return;
+    }
+    if (hits[index]?.rank === 2) {
+      const next = hits[index]?.color ?? DEFAULT_COLOR;
+      if (current.length && next !== color) {
+        flush();
       }
-      const overlap =
-        Math.min(entry.word.x1, stroke.maxX + 1) -
-        Math.max(entry.word.x0, stroke.minX);
-      const wordWidth = Math.max(1, entry.word.x1 - entry.word.x0);
-      return overlap / wordWidth >= 0.4;
-    });
-    if (!selected.length) {
-      continue;
+      color = next;
     }
-    for (const entry of selected) {
-      claimed.add(entry.index);
-    }
-    passages.push({
-      words: selected.map((entry) => entry.index),
-      color: DEFAULT_COLOR,
-      kind: "underline",
-    });
-  }
+    current.push(entry.index);
+    claimed.add(entry.index);
+  });
+  flush();
   return passages;
 }
 
-function isUnderline(
-  stroke: Stroke & { height: number; columns: number; thickness: number[] },
-  em: number,
-  bandTop: number,
-): boolean {
-  const width = stroke.maxX - stroke.minX + 1;
-  if (width < em * 1.5 || stroke.columns / width < 0.55) {
-    return false;
+/**
+ * A stroke under this word. Rank 2 is a mark, rank 1 is a short piece kept
+ * only when the words on either side are marked. The stroke has to start
+ * under the letters and finish, so the highlighter on the next line does not
+ * count.
+ */
+function underlineHit(image: RgbaImage, word: OcrWord): UnderlineHit {
+  const left = clamp(Math.floor(word.x0), 0, image.width - 1);
+  const right = clamp(Math.ceil(word.x1), left + 1, image.width);
+  const top = clamp(Math.floor(word.y0), 0, image.height - 1);
+  const bottom = clamp(Math.ceil(word.y1), top + 1, image.height);
+  const width = right - left;
+  const box = bottom - top;
+  if (width < 2 || box < 2) {
+    return { rank: 0, color: DEFAULT_COLOR };
   }
-  const thick = percentile(stroke.thickness, 0.85);
-  const thin = percentile(stroke.thickness, 0.15);
-  const limit = Math.max(4, em * 0.28);
-  if (thick > limit || thick - thin > Math.max(3, em * 0.2)) {
-    return false;
+  const paper = localPaper(image, left, right, top, bottom);
+  if (!paper) {
+    return { rank: 0, color: DEFAULT_COLOR };
   }
-  return bandTop === 0 || stroke.top > bandTop;
-}
-
-function mergeStrokes(strokes: Stroke[], em: number): Stroke[] {
-  const sorted = [...strokes].sort((a, b) => a.minX - b.minX || a.top - b.top);
-  const merged: Stroke[] = [];
-  for (const stroke of sorted) {
-    const previous = merged[merged.length - 1];
-    const gap = previous ? stroke.minX - previous.maxX : Infinity;
-    const aligned = previous
-      ? Math.abs(stroke.top - previous.top) <= em * 0.35
-      : false;
-    if (previous && gap <= em * 1.5 && aligned) {
-      previous.maxX = Math.max(previous.maxX, stroke.maxX);
-      continue;
-    }
-    merged.push({ ...stroke });
-  }
-  return merged.filter((stroke) => stroke.maxX - stroke.minX + 1 >= em * 1.5);
-}
-
-type RawStroke = Stroke & {
-  height: number;
-  columns: number;
-  thickness: number[];
-};
-
-function components(
-  ink: Uint8Array,
-  width: number,
-  height: number,
-  band: { left: number; top: number },
-): RawStroke[] {
-  const seen = new Uint8Array(ink.length);
-  const strokes: RawStroke[] = [];
-  const stack: number[] = [];
-  for (let start = 0; start < ink.length; start++) {
-    if (!ink[start] || seen[start]) {
-      continue;
-    }
-    let minX = Infinity;
-    let maxX = -1;
-    let minY = Infinity;
-    let maxY = -1;
-    const tops = new Map<number, number>();
-    const thick = new Map<number, number>();
-    stack.push(start);
-    seen[start] = 1;
-    while (stack.length) {
-      const pixel = stack.pop();
-      if (pixel == null) {
+  const paperLab = toLab(paper.red, paper.green, paper.blue);
+  const end = clamp(bottom + Math.round(box * 0.55), bottom, image.height);
+  const rows: {
+    dark: number;
+    chroma: number;
+    red: number;
+    green: number;
+    blue: number;
+  }[] = [];
+  for (let y = top; y < end; y++) {
+    let dark = 0;
+    let bright = 0;
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    for (let x = left; x < right; x++) {
+      const pixel = read(image, x, y);
+      if (!pixel) {
         continue;
       }
-      const x = pixel % width;
-      const y = Math.floor(pixel / width);
-      const absX = band.left + x;
-      const absY = band.top + y;
-      minX = Math.min(minX, absX);
-      maxX = Math.max(maxX, absX);
-      minY = Math.min(minY, absY);
-      maxY = Math.max(maxY, absY);
-      const previousTop = tops.get(absX);
-      tops.set(absX, previousTop == null ? absY : Math.min(previousTop, absY));
-      thick.set(absX, (thick.get(absX) ?? 0) + 1);
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) {
-            continue;
-          }
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
-            continue;
-          }
-          const next = ny * width + nx;
-          if (!ink[next] || seen[next]) {
-            continue;
-          }
-          seen[next] = 1;
-          stack.push(next);
-        }
+      const pixelLuma = luma(pixel.red, pixel.green, pixel.blue);
+      if (paper.luma - pixelLuma > DARK_MARGIN) {
+        dark++;
+      }
+      if (pixelLuma > paper.luma * 0.7) {
+        bright++;
+        red += pixel.red;
+        green += pixel.green;
+        blue += pixel.blue;
       }
     }
-    const columns = [...tops.values()];
-    strokes.push({
-      minX,
-      maxX,
-      top: percentile(columns, 0.2),
-      height: maxY - minY + 1,
-      columns: tops.size,
-      thickness: [...thick.values()],
+    const chroma =
+      bright >= width * 0.62
+        ? chromaDistance(
+            toLab(red / bright, green / bright, blue / bright),
+            paperLab,
+          )
+        : 0;
+    rows.push({
+      dark: dark / width,
+      chroma,
+      red: bright ? red / bright : 0,
+      green: bright ? green / bright : 0,
+      blue: bright ? blue / bright : 0,
     });
   }
-  return strokes;
-}
-
-function strokeMask(
-  image: RgbaImage,
-  band: { left: number; right: number; top: number; bottom: number },
-  width: number,
-  height: number,
-  em: number,
-): Uint8Array {
-  const plane = new Float32Array(width * height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const pixel = sample(image, band.left + x, band.top + y);
-      plane[y * width + x] = pixel ? luma(pixel[0], pixel[1], pixel[2]) : 255;
+  const glyph = glyphRun(rows, box);
+  const gh = glyph
+    ? glyph.end - glyph.start
+    : Math.max(8, Math.round(box * 0.45));
+  const from = glyph ? glyph.end : Math.round(box * 0.45);
+  const to = glyph
+    ? Math.min(rows.length, glyph.end + Math.max(5, Math.round(gh * 1.6)))
+    : rows.length;
+  let weak = false;
+  let peakDark = 0;
+  let peakChroma = 0;
+  for (let index = from; index < to; index++) {
+    const row = rows[index];
+    if (!row) {
+      continue;
     }
-  }
-  const paper = columnPaper(
-    plane,
-    width,
-    height,
-    Math.max(8, Math.round(em * 2)),
-  );
-  const ink = new Uint8Array(width * height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const pixel = sample(image, band.left + x, band.top + y);
-      if (pixel && isMonochromeInk(pixel, paper[x] ?? 255)) {
-        ink[y * width + x] = 1;
-      }
+    peakDark = Math.max(peakDark, row.dark);
+    peakChroma = Math.max(peakChroma, row.chroma);
+    if (row.dark < 0.56 && row.chroma < CHROMA_STRONG) {
+      continue;
     }
-  }
-  const closed = horizontalClose(
-    ink,
-    width,
-    height,
-    Math.max(2, Math.round(em * 0.45)),
-  );
-  return horizontalOpen(
-    closed,
-    width,
-    height,
-    Math.max(1, Math.round(em * 0.12)),
-  );
-}
-
-/** Moving average of each column's luma, so a shadow does not set the cutoff. */
-function columnPaper(
-  plane: Float32Array,
-  width: number,
-  height: number,
-  radius: number,
-): Float32Array {
-  const columns = new Float64Array(width);
-  for (let x = 0; x < width; x++) {
-    let sum = 0;
-    for (let y = 0; y < height; y++) {
-      sum += plane[y * width + x] ?? 0;
+    let endIndex = index + 1;
+    while (
+      endIndex < to &&
+      rows[endIndex] &&
+      ((rows[endIndex]?.dark ?? 0) >= 0.4 ||
+        (rows[endIndex]?.chroma ?? 0) >= 6.2)
+    ) {
+      endIndex++;
     }
-    columns[x] = sum / height;
-  }
-  const prefix = new Float64Array(width + 1);
-  for (let x = 0; x < width; x++) {
-    prefix[x + 1] = (prefix[x] ?? 0) + (columns[x] ?? 0);
-  }
-  const paper = new Float32Array(width);
-  for (let x = 0; x < width; x++) {
-    const left = Math.max(0, x - radius);
-    const right = Math.min(width - 1, x + radius);
-    paper[x] =
-      ((prefix[right + 1] ?? 0) - (prefix[left] ?? 0)) / (right - left + 1);
-  }
-  return paper;
-}
-
-function horizontalClose(
-  ink: Uint8Array,
-  width: number,
-  height: number,
-  radius: number,
-): Uint8Array {
-  return horizontalErode(
-    horizontalDilate(ink, width, height, radius),
-    width,
-    height,
-    radius,
-  );
-}
-
-function horizontalOpen(
-  ink: Uint8Array,
-  width: number,
-  height: number,
-  radius: number,
-): Uint8Array {
-  return horizontalDilate(
-    horizontalErode(ink, width, height, radius),
-    width,
-    height,
-    radius,
-  );
-}
-
-function horizontalDilate(
-  ink: Uint8Array,
-  width: number,
-  height: number,
-  radius: number,
-): Uint8Array {
-  const dilated = new Uint8Array(ink.length);
-  for (let y = 0; y < height; y++) {
-    const row = y * width;
-    for (let x = 0; x < width; x++) {
-      const left = Math.max(0, x - radius);
-      const right = Math.min(width - 1, x + radius);
-      for (let neighbor = left; neighbor <= right; neighbor++) {
-        if (ink[row + neighbor]) {
-          dilated[row + x] = 1;
-          break;
-        }
-      }
-    }
-  }
-  return dilated;
-}
-
-function horizontalErode(
-  ink: Uint8Array,
-  width: number,
-  height: number,
-  radius: number,
-): Uint8Array {
-  const eroded = new Uint8Array(ink.length);
-  for (let y = 0; y < height; y++) {
-    const row = y * width;
-    for (let x = 0; x < width; x++) {
-      const left = Math.max(0, x - radius);
-      const right = Math.min(width - 1, x + radius);
-      if (right - left < radius * 2) {
+    const closed = endIndex < to;
+    let core = 0;
+    let best = row;
+    for (let cursor = index; cursor < endIndex; cursor++) {
+      const sample = rows[cursor];
+      if (!sample) {
         continue;
       }
-      let solid = true;
-      for (let neighbor = left; neighbor <= right; neighbor++) {
-        if (!ink[row + neighbor]) {
-          solid = false;
-          break;
-        }
+      if (sample.dark >= 0.56 || sample.chroma >= CHROMA_STRONG) {
+        core++;
       }
-      if (solid) {
-        eroded[row + x] = 1;
+      if (
+        Math.max(sample.dark, sample.chroma / 10) >
+        Math.max(best.dark, best.chroma / 10)
+      ) {
+        best = sample;
       }
     }
+    const previous = rows[index - 1];
+    // A coloured stroke brightens over a few rows, so the row above the
+    // threshold is still the same stroke. Letter bottoms stay dark.
+    const gap =
+      index === from ||
+      ((previous?.dark ?? 1) < 0.42 && (previous?.chroma ?? 99) < 8);
+    const thin = core >= 1 && core <= Math.max(6, Math.round(gh * 0.9));
+    const marked = best.dark >= 0.58 || best.chroma >= CHROMA_STRONG;
+    if (closed && gap && thin && marked) {
+      return {
+        rank: 2,
+        color: snapMarkColor(best.red, best.green, best.blue),
+      };
+    }
+    if (best.dark >= 0.3 || best.chroma >= CHROMA_WEAK) {
+      weak = true;
+    }
+    index = endIndex - 1;
   }
-  return eroded;
+  if (weak || peakDark >= 0.3 || peakChroma >= CHROMA_WEAK) {
+    return { rank: 1, color: DEFAULT_COLOR };
+  }
+  return { rank: 0, color: DEFAULT_COLOR };
 }
 
-function isMonochromeInk(
-  pixel: [number, number, number],
-  paperLuma: number,
-): boolean {
-  const [red, green, blue] = pixel;
-  const pixelLuma = luma(red, green, blue);
-  const margin = Math.max(22, paperLuma * 0.08);
-  if (paperLuma - pixelLuma < margin) {
-    return false;
+function glyphRun(
+  rows: { dark: number; chroma: number }[],
+  box: number,
+): { start: number; end: number } | null {
+  let best: { start: number; end: number } | null = null;
+  let index = 0;
+  while (index < rows.length) {
+    if (!letterRow(rows[index])) {
+      index++;
+      continue;
+    }
+    const start = index;
+    while (index < rows.length && letterRow(rows[index])) {
+      index++;
+    }
+    if (start > box * 0.72) {
+      continue;
+    }
+    if (!best || index - start > best.end - best.start) {
+      best = { start, end: index };
+    }
   }
-  if (chroma(red, green, blue) <= 42) {
-    return true;
+  if (!best || best.end - best.start < 3) {
+    return null;
   }
-  return pixelLuma < paperLuma * 0.45;
+  return best;
 }
 
-function sample(
+/** Printed ink. A coloured stroke under the letters is not part of the glyph. */
+function letterRow(row: { dark: number; chroma: number } | undefined): boolean {
+  return (row?.dark ?? 0) >= 0.2 && (row?.chroma ?? 0) < CHROMA_STRONG;
+}
+
+function localPaper(
+  image: RgbaImage,
+  left: number,
+  right: number,
+  top: number,
+  bottom: number,
+): { red: number; green: number; blue: number; luma: number } | null {
+  const upperEnd = top + Math.max(1, Math.round((bottom - top) * 0.45));
+  const upper = paperFromRows(image, left, right, top, upperEnd);
+  if (upper && upper.luma >= 90) {
+    return upper;
+  }
+  return paperFromRows(image, left, right, top, bottom);
+}
+
+function paperFromRows(
+  image: RgbaImage,
+  left: number,
+  right: number,
+  top: number,
+  bottom: number,
+): { red: number; green: number; blue: number; luma: number } | null {
+  const samples: { red: number; green: number; blue: number; luma: number }[] =
+    [];
+  for (let y = top; y < bottom; y++) {
+    for (let x = left; x < right; x++) {
+      const pixel = read(image, x, y);
+      if (!pixel) {
+        continue;
+      }
+      samples.push({
+        ...pixel,
+        luma: luma(pixel.red, pixel.green, pixel.blue),
+      });
+    }
+  }
+  if (samples.length < 4) {
+    return null;
+  }
+  samples.sort((a, b) => a.luma - b.luma);
+  const light = samples.slice(Math.floor(samples.length * 0.7));
+  const count = light.length || 1;
+  const red = light.reduce((sum, sample) => sum + sample.red, 0) / count;
+  const green = light.reduce((sum, sample) => sum + sample.green, 0) / count;
+  const blue = light.reduce((sum, sample) => sum + sample.blue, 0) / count;
+  return { red, green, blue, luma: luma(red, green, blue) };
+}
+
+function read(
   image: RgbaImage,
   x: number,
   y: number,
-): [number, number, number] | null {
+): { red: number; green: number; blue: number } | null {
   if (x < 0 || y < 0 || x >= image.width || y >= image.height) {
     return null;
   }
   const offset = (y * image.width + x) * 4;
-  return [
-    image.data[offset] ?? 0,
-    image.data[offset + 1] ?? 0,
-    image.data[offset + 2] ?? 0,
-  ];
+  return {
+    red: image.data[offset] ?? 0,
+    green: image.data[offset + 1] ?? 0,
+    blue: image.data[offset + 2] ?? 0,
+  };
 }
 
 function luma(red: number, green: number, blue: number): number {
   return red * 0.2126 + green * 0.7152 + blue * 0.0722;
-}
-
-function chroma(red: number, green: number, blue: number): number {
-  return Math.max(red, green, blue) - Math.min(red, green, blue);
-}
-
-function percentile(values: number[], fraction: number): number {
-  if (!values.length) {
-    return 0;
-  }
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.min(
-    sorted.length - 1,
-    Math.max(0, Math.round((sorted.length - 1) * fraction)),
-  );
-  return sorted[index] ?? 0;
 }
 
 function clamp(value: number, min: number, max: number): number {

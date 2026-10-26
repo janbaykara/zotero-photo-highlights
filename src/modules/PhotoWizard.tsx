@@ -29,7 +29,6 @@ import {
   scaleLongestSide,
 } from "../photo/files";
 import { detectMarkedPassages } from "../photo/marks";
-import { loadOpenCv } from "../photo/opencv";
 import {
   addEmptyPassage,
   applyPassageDrag,
@@ -326,12 +325,11 @@ export function PhotoWizard(props: {
           );
           const want = flags();
           if (pixels && (want.underlines || want.highlights)) {
-            const cv = want.highlights ? await loadOpenCv(win) : null;
             const now = flags();
-            if (now.underlines || (now.highlights && cv)) {
-              detected = detectMarkedPassages(pixels, recognized.words, cv, {
+            if (now.underlines || now.highlights) {
+              detected = detectMarkedPassages(pixels, recognized.words, {
                 underlines: now.underlines,
-                highlights: now.highlights && Boolean(cv),
+                highlights: now.highlights,
               });
             }
           }
@@ -632,14 +630,13 @@ export function PhotoWizard(props: {
     if (!pixels || (!want.underlines && !want.highlights)) {
       return [];
     }
-    const cv = want.highlights ? await loadOpenCv(win) : null;
     const now = readFlags(photo.id);
-    if (!now.underlines && !(now.highlights && cv)) {
+    if (!now.underlines && !now.highlights) {
       return [];
     }
-    return detectMarkedPassages(pixels, words, cv, {
+    return detectMarkedPassages(pixels, words, {
       underlines: now.underlines,
-      highlights: now.highlights && Boolean(cv),
+      highlights: now.highlights,
     });
   };
 

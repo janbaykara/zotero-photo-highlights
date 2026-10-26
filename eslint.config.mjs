@@ -4,7 +4,7 @@ import zotero from "@zotero-plugin/eslint-config";
 
 export default [
   {
-    ignores: ["website/**", "addon/content/ocr/**", "addon/content/opencv/**"],
+    ignores: ["website/**", "addon/content/ocr/**"],
   },
   ...zotero({
     overrides: [

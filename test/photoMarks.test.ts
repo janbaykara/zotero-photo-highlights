@@ -1,7 +1,5 @@
 import { assert } from "chai";
-import { config } from "../package.json";
 import { detectMarkedPassages, type RgbaImage } from "../src/photo/marks";
-import type { OpenCv } from "../src/photo/opencv";
 import type { OcrWord } from "../src/photo/types";
 
 type RGB = [number, number, number];
@@ -230,13 +228,8 @@ describe("marked passages", function () {
     assert.deepEqual(detectMarkedPassages(image, words), []);
   });
 
-  describe("highlighter with OpenCV", function () {
-    let cv: OpenCv;
-
-    before(async function () {
-      this.timeout(20000);
-      cv = await loadOpenCvForTests();
-    });
+  describe("highlighter", function () {
+    const scan = { highlights: true, underlines: true };
 
     it("splits yellow and blue washes into two passages", function () {
       const image = makeImage(280, 100, WHITE);
@@ -252,7 +245,7 @@ describe("marked passages", function () {
         );
         glyphs(image, word);
       });
-      const found = detectMarkedPassages(image, words, cv);
+      const found = detectMarkedPassages(image, words, scan);
       assert.deepEqual(
         found.map((span) => span.words),
         [
@@ -272,14 +265,37 @@ describe("marked passages", function () {
       for (const word of creamWords) {
         glyphs(cream, word);
       }
-      assert.deepEqual(detectMarkedPassages(cream, creamWords, cv), []);
+      assert.deepEqual(detectMarkedPassages(cream, creamWords, scan), []);
 
       const yellow = makeImage(280, 100, YELLOW);
       const yellowWords = lineWords(0, 12, 20, 3);
       for (const word of yellowWords) {
         glyphs(yellow, word);
       }
-      assert.deepEqual(detectMarkedPassages(yellow, yellowWords, cv), []);
+      assert.deepEqual(detectMarkedPassages(yellow, yellowWords, scan), []);
+    });
+
+    it("selects a whole line of yellow when the margin is still cream", function () {
+      const image = makeImage(280, 100, CREAM);
+      const words = lineWords(0, 12, 20, 3);
+      for (const word of words) {
+        fillRect(
+          image,
+          word.x0,
+          word.y0,
+          word.x1 - word.x0,
+          word.y1 - word.y0,
+          YELLOW,
+        );
+        glyphs(image, word);
+      }
+      const found = detectMarkedPassages(image, words, scan);
+      assert.deepEqual(
+        found.map((span) => span.words),
+        [[0, 1, 2]],
+      );
+      assert.equal(found[0]?.color, "#ffd400");
+      assert.equal(found[0]?.kind, "highlight");
     });
 
     it("selects a yellow wash on cream paper", function () {
@@ -298,7 +314,7 @@ describe("marked passages", function () {
         }
         glyphs(image, word);
       });
-      const found = detectMarkedPassages(image, words, cv);
+      const found = detectMarkedPassages(image, words, scan);
       assert.deepEqual(
         found.map((span) => span.words),
         [[1, 2]],
@@ -325,7 +341,7 @@ describe("marked passages", function () {
           glyphs(image, word);
         }
       });
-      const found = detectMarkedPassages(image, words, cv);
+      const found = detectMarkedPassages(image, words, scan);
       assert.deepEqual(
         found.map((span) => span.words),
         [
@@ -354,7 +370,7 @@ describe("marked passages", function () {
         glyphs(image, word);
         fillRect(image, word.x0, word.y1, word.x1 - word.x0, 2, INK);
       }
-      const found = detectMarkedPassages(image, words, cv);
+      const found = detectMarkedPassages(image, words, scan);
       assert.deepEqual(
         found.map((span) => span.words),
         [[0, 1, 2]],
@@ -424,33 +440,4 @@ function glyphs(image: RgbaImage, word: OcrWord): void {
   for (let index = 0; index < 3; index++) {
     fillRect(image, word.x0 + 4 + index * 8, word.y0 + 2, 2, height - 6, INK);
   }
-}
-
-/** The test page is a Zotero chrome window, so OpenCV loads the same way as the plugin. */
-async function loadOpenCvForTests(): Promise<OpenCv> {
-  const win = window as Window & {
-    cv?: OpenCv | Promise<OpenCv>;
-    define?: unknown;
-  };
-  const previousDefine = win.define;
-  win.define = undefined;
-  try {
-    Services.scriptloader.loadSubScript(
-      `chrome://${config.addonRef}/content/opencv/opencv.js`,
-      win,
-    );
-  } finally {
-    if (previousDefine === undefined) {
-      delete win.define;
-    } else {
-      win.define = previousDefine;
-    }
-  }
-  const created = win.cv;
-  if (!created) {
-    throw new Error("OpenCV did not load");
-  }
-  return typeof (created as Promise<OpenCv>).then === "function"
-    ? await created
-    : created;
 }

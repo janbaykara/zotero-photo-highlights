@@ -1,6 +1,5 @@
 import { ZOTERO_ANNOTATION_COLOR_ORDER } from "@janbaykara/zotero-annotations";
 import type { RgbaImage } from "./marks";
-import type { OpenCv } from "./opencv";
 
 export type HighlightWord = {
   index: number;
@@ -16,21 +15,17 @@ const PALETTE = ZOTERO_ANNOTATION_COLOR_ORDER.filter(
   (color) => color !== "#aaaaaa",
 );
 
-const PAPER_PERCENTILE = 0.2;
-const SATURATION_MARGIN = 36;
-const SATURATION_FLOOR = 60;
-const VALUE_MIN = 80;
-const COVERAGE = 0.22;
-const NARROW_COVERAGE = 0.1;
-const RAW_COVERAGE = 0.08;
+const DEFAULT_COLOR = "#ffd400";
+/** a/b distance from the page margin. A whole line of pale marker still clears this. */
+const WASH_DISTANCE = 15;
 
 /**
  * Highlighter behind the letters, for one OCR line.
- * Saturation is compared with the paper on that line. The mean colour of the
- * wash is snapped to the Zotero palette, and a colour change starts a new passage.
+ * Paper colour comes from the bright pixels of the whole photo, so a line that
+ * is entirely marked still differs from the margin. The mean colour of the wash
+ * is snapped to the Zotero palette, and a colour change starts a new passage.
  */
 export function detectHighlightPassages(
-  cv: OpenCv,
   image: RgbaImage,
   words: HighlightWord[],
 ): ColoredPassage[] {
@@ -40,167 +35,148 @@ export function detectHighlightPassages(
   if (!usable.length || !image.width || !image.height) {
     return [];
   }
-  const em = median(usable.map((word) => word.y1 - word.y0));
-  if (em < 2) {
+  const paper = pagePaper(image);
+  if (!paper) {
     return [];
   }
-  const crop = {
-    x: clamp(
-      Math.floor(Math.min(...usable.map((word) => word.x0))),
-      0,
-      image.width,
-    ),
-    y: clamp(
-      Math.floor(Math.min(...usable.map((word) => word.y0))),
-      0,
-      image.height,
-    ),
-    right: clamp(
-      Math.ceil(Math.max(...usable.map((word) => word.x1))),
-      0,
-      image.width,
-    ),
-    bottom: clamp(
-      Math.ceil(Math.max(...usable.map((word) => word.y1))),
-      0,
-      image.height,
-    ),
-  };
-  const width = crop.right - crop.x;
-  const height = crop.bottom - crop.y;
-  if (width < 2 || height < 2) {
-    return [];
-  }
-  const packed = new Uint8Array(width * height * 4);
-  for (let y = 0; y < height; y++) {
-    const src = ((crop.y + y) * image.width + crop.x) * 4;
-    packed.set(image.data.subarray(src, src + width * 4), y * width * 4);
-  }
-
-  const trash: { delete: () => void }[] = [];
-  const keep = <T extends { delete: () => void }>(mat: T): T => {
-    trash.push(mat);
-    return mat;
-  };
-  try {
-    const rgba = keep(cv.matFromArray(height, width, cv.CV_8UC4, packed));
-    const rgb = keep(new cv.Mat());
-    const hsv = keep(new cv.Mat());
-    cv.cvtColor(rgba, rgb, cv.COLOR_RGBA2RGB);
-    cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
-    const channels = keep(new cv.MatVector());
-    cv.split(hsv, channels);
-    keep(channels.get(0));
-    const saturation = keep(channels.get(1));
-    const value = keep(channels.get(2));
-    const paper = paperSaturation(saturation.data, value.data);
-    if (paper === null) {
-      return [];
-    }
-    const limit = Math.max(SATURATION_FLOOR, paper + SATURATION_MARGIN);
-    const saturated = keep(new cv.Mat());
-    const bright = keep(new cv.Mat());
-    const mask = keep(new cv.Mat());
-    cv.threshold(saturation, saturated, limit, 255, cv.THRESH_BINARY);
-    cv.threshold(value, bright, VALUE_MIN - 1, 255, cv.THRESH_BINARY);
-    cv.bitwise_and(saturated, bright, mask);
-    const closeWidth = Math.max(3, Math.round(em * 0.4) | 1);
-    const closeKernel = keep(
-      cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(closeWidth, 1)),
-    );
-    const openKernel = keep(
-      cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 1)),
-    );
-    const closed = keep(new cv.Mat());
-    const opened = keep(new cv.Mat());
-    cv.morphologyEx(mask, closed, cv.MORPH_CLOSE, closeKernel);
-    cv.morphologyEx(closed, opened, cv.MORPH_OPEN, openKernel);
-
-    const colors = new Map<number, string>();
-    for (const word of usable) {
-      const color = wordColor(
-        word,
-        crop,
-        width,
-        em,
-        mask.data,
-        opened.data,
-        rgb.data,
-      );
-      if (color) {
-        colors.set(word.index, color);
-      }
-    }
-    return groupColored(usable, colors);
-  } finally {
-    for (const mat of trash.reverse()) {
-      mat.delete();
+  const colors = new Map<number, string>();
+  for (const word of usable) {
+    const wash = wordWash(image, word, paper);
+    if (wash) {
+      colors.set(word.index, wash);
     }
   }
+  return groupColored(usable, colors);
 }
 
-function paperSaturation(
-  saturation: Uint8Array,
-  value: Uint8Array,
-): number | null {
-  const samples: number[] = [];
-  for (let i = 0; i < saturation.length; i++) {
-    if ((value[i] ?? 0) >= VALUE_MIN) {
-      samples.push(saturation[i] ?? 0);
+const PALETTE_HUES = PALETTE.map((hex) => ({
+  hex,
+  hue: hueOf(
+    Number.parseInt(hex.slice(1, 3), 16),
+    Number.parseInt(hex.slice(3, 5), 16),
+    Number.parseInt(hex.slice(5, 7), 16),
+  ),
+}));
+
+/**
+ * Nearest Zotero highlight colour by hue. A washed-out yellow is still yellow;
+ * grey ink and pencil stay the default yellow.
+ */
+export function snapMarkColor(
+  red: number,
+  green: number,
+  blue: number,
+): string {
+  const span = Math.max(red, green, blue) - Math.min(red, green, blue);
+  const hue = hueOf(red, green, blue);
+  if (hue === null) {
+    return DEFAULT_COLOR;
+  }
+  let best: string = PALETTE[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const entry of PALETTE_HUES) {
+    if (entry.hue === null) {
+      continue;
+    }
+    const distance = Math.min(
+      Math.abs(hue - entry.hue),
+      360 - Math.abs(hue - entry.hue),
+    );
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = entry.hex;
+    }
+  }
+  // Pencil and shadow on cream sit near yellow and are barely coloured.
+  // A pale blue stroke is far from yellow, so it still snaps.
+  if (span < 28 && best !== DEFAULT_COLOR) {
+    const yellowHue =
+      PALETTE_HUES.find((entry) => entry.hex === DEFAULT_COLOR)?.hue ?? hue;
+    const fromYellow = Math.min(
+      Math.abs(hue - yellowHue),
+      360 - Math.abs(hue - yellowHue),
+    );
+    if (fromYellow < 36) {
+      return DEFAULT_COLOR;
+    }
+  }
+  return best;
+}
+
+function hueOf(red: number, green: number, blue: number): number | null {
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const span = max - min;
+  // Pale photographed marker still has a hue. Grey ink and pencil do not.
+  if (span < 12) {
+    return null;
+  }
+  let hue: number;
+  if (max === red) {
+    hue = ((green - blue) / span) % 6;
+  } else if (max === green) {
+    hue = (blue - red) / span + 2;
+  } else {
+    hue = (red - green) / span + 4;
+  }
+  hue *= 60;
+  if (hue < 0) {
+    hue += 360;
+  }
+  return hue;
+}
+
+function pagePaper(image: RgbaImage): Lab | null {
+  const step = Math.max(
+    4,
+    Math.round(Math.min(image.width, image.height) / 200),
+  );
+  const samples: { luma: number; red: number; green: number; blue: number }[] =
+    [];
+  for (let y = 0; y < image.height; y += step) {
+    for (let x = 0; x < image.width; x += step) {
+      const pixel = read(image, x, y);
+      if (!pixel) {
+        continue;
+      }
+      samples.push({
+        luma: luma(pixel.red, pixel.green, pixel.blue),
+        ...pixel,
+      });
     }
   }
   if (samples.length < 20) {
     return null;
   }
-  samples.sort((a, b) => a - b);
-  const index = Math.floor((samples.length - 1) * PAPER_PERCENTILE);
-  return samples[index] ?? 0;
+  samples.sort((a, b) => a.luma - b.luma);
+  const from = Math.floor(samples.length * 0.82);
+  const to = Math.max(from + 1, Math.floor(samples.length * 0.97));
+  const chosen = samples.slice(from, to);
+  const count = chosen.length || 1;
+  const red = chosen.reduce((sum, sample) => sum + sample.red, 0) / count;
+  const green = chosen.reduce((sum, sample) => sum + sample.green, 0) / count;
+  const blue = chosen.reduce((sum, sample) => sum + sample.blue, 0) / count;
+  return toLab(red, green, blue);
 }
 
-function wordColor(
+function wordWash(
+  image: RgbaImage,
   word: HighlightWord,
-  crop: { x: number; y: number },
-  stride: number,
-  em: number,
-  raw: Uint8Array,
-  opened: Uint8Array,
-  rgb: Uint8Array,
+  paper: Lab,
 ): string | null {
-  const x0 = Math.max(0, Math.floor(word.x0) - crop.x);
-  const y0 = Math.max(0, Math.floor(word.y0) - crop.y);
-  const x1 = Math.min(stride, Math.ceil(word.x1) - crop.x);
-  const y1 = Math.min(raw.length / stride, Math.ceil(word.y1) - crop.y);
-  const boxWidth = x1 - x0;
-  const boxHeight = y1 - y0;
-  if (boxWidth < 1 || boxHeight < 1) {
+  const pixels = pixelsIn(image, word.x0, word.y0, word.x1, word.y1);
+  if (pixels.length < 8) {
     return null;
   }
-  let openedCount = 0;
-  let rawCount = 0;
-  let red = 0;
-  let green = 0;
-  let blue = 0;
-  for (let y = y0; y < y1; y++) {
-    for (let x = x0; x < x1; x++) {
-      const index = y * stride + x;
-      if (opened[index]) {
-        openedCount++;
-      }
-      if (raw[index]) {
-        rawCount++;
-        const pixel = index * 3;
-        red += rgb[pixel] ?? 0;
-        green += rgb[pixel + 1] ?? 0;
-        blue += rgb[pixel + 2] ?? 0;
-      }
-    }
-  }
-  const area = boxWidth * boxHeight;
-  const needed = boxWidth < em * 0.45 ? NARROW_COVERAGE : COVERAGE;
-  if (openedCount / area < needed || rawCount / area < RAW_COVERAGE) {
+  const light = lightest(pixels, 0.55);
+  const mean = meanRgb(light);
+  if (
+    chromaDistance(toLab(mean.red, mean.green, mean.blue), paper) <
+    WASH_DISTANCE
+  ) {
     return null;
   }
-  return snapColor(red / rawCount, green / rawCount, blue / rawCount);
+  return snapMarkColor(mean.red, mean.green, mean.blue);
 }
 
 function groupColored(
@@ -233,31 +209,93 @@ function groupColored(
   return passages;
 }
 
-function snapColor(red: number, green: number, blue: number): string | null {
-  if (Math.max(red, green, blue) - Math.min(red, green, blue) < 28) {
-    return null;
-  }
-  let best: string = PALETTE[0];
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const hex of PALETTE) {
-    const paletteRed = Number.parseInt(hex.slice(1, 3), 16);
-    const paletteGreen = Number.parseInt(hex.slice(3, 5), 16);
-    const paletteBlue = Number.parseInt(hex.slice(5, 7), 16);
-    const distance =
-      (red - paletteRed) ** 2 +
-      (green - paletteGreen) ** 2 +
-      (blue - paletteBlue) ** 2;
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = hex;
+type Rgb = { red: number; green: number; blue: number };
+
+type Lab = { l: number; a: number; b: number };
+
+function pixelsIn(
+  image: RgbaImage,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): Rgb[] {
+  const left = clamp(Math.floor(x0), 0, image.width - 1);
+  const right = clamp(Math.ceil(x1), left + 1, image.width);
+  const top = clamp(Math.floor(y0), 0, image.height - 1);
+  const bottom = clamp(Math.ceil(y1), top + 1, image.height);
+  const pixels: Rgb[] = [];
+  for (let y = top; y < bottom; y++) {
+    for (let x = left; x < right; x++) {
+      const pixel = read(image, x, y);
+      if (pixel) {
+        pixels.push(pixel);
+      }
     }
   }
-  return best;
+  return pixels;
 }
 
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0;
+function lightest(pixels: Rgb[], startFraction: number): Rgb[] {
+  const ranked = [...pixels].sort(
+    (a, b) => luma(a.red, a.green, a.blue) - luma(b.red, b.green, b.blue),
+  );
+  const start = Math.min(
+    ranked.length - 1,
+    Math.floor(ranked.length * startFraction),
+  );
+  return ranked.slice(start);
+}
+
+function meanRgb(pixels: Rgb[]): Rgb {
+  const count = pixels.length || 1;
+  return {
+    red: pixels.reduce((sum, pixel) => sum + pixel.red, 0) / count,
+    green: pixels.reduce((sum, pixel) => sum + pixel.green, 0) / count,
+    blue: pixels.reduce((sum, pixel) => sum + pixel.blue, 0) / count,
+  };
+}
+
+function read(image: RgbaImage, x: number, y: number): Rgb | null {
+  if (x < 0 || y < 0 || x >= image.width || y >= image.height) {
+    return null;
+  }
+  const offset = (y * image.width + x) * 4;
+  return {
+    red: image.data[offset] ?? 0,
+    green: image.data[offset + 1] ?? 0,
+    blue: image.data[offset + 2] ?? 0,
+  };
+}
+
+function luma(red: number, green: number, blue: number): number {
+  return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+}
+
+export function chromaDistance(left: Lab, right: Lab): number {
+  return Math.hypot(left.a - right.a, left.b - right.b);
+}
+
+export function toLab(red: number, green: number, blue: number): Lab {
+  const r = linear(red);
+  const g = linear(green);
+  const b = linear(blue);
+  const x = (r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047;
+  const y = r * 0.2126729 + g * 0.7151522 + b * 0.072175;
+  const z = (r * 0.0193339 + g * 0.119192 + b * 0.9503041) / 1.08883;
+  const fx = pivot(x);
+  const fy = pivot(y);
+  const fz = pivot(z);
+  return { l: 116 * fy - 16, a: 500 * (fx - fy), b: 200 * (fy - fz) };
+}
+
+function linear(channel: number): number {
+  const value = channel / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function pivot(channel: number): number {
+  return channel > 0.008856 ? Math.cbrt(channel) : 7.787 * channel + 16 / 116;
 }
 
 function clamp(value: number, min: number, max: number): number {

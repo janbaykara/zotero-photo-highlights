@@ -24,12 +24,12 @@
   "scripts": {
     "build:css": "node scripts/build-css.js",
     "watch:css": "npx @tailwindcss/cli -i ./src/tailwind.css -o ./addon/content/tailwind.css --watch",
-    "start": "node scripts/copy-opencv.mjs && node scripts/copy-ort.mjs && concurrently \"pnpm watch:css\" \"zotero-plugin serve\"",
-    "build": "NODE_ENV=production pnpm build:css && pnpm lint:check && node scripts/copy-opencv.mjs && node scripts/copy-ort.mjs && NODE_ENV=production pnpm zotero-plugin build && NODE_ENV=production pnpm tsc --noEmit",
+    "start": "node scripts/copy-ort.mjs && concurrently \"pnpm watch:css\" \"zotero-plugin serve\"",
+    "build": "NODE_ENV=production pnpm build:css && pnpm lint:check && node scripts/copy-ort.mjs && NODE_ENV=production pnpm zotero-plugin build && NODE_ENV=production pnpm tsc --noEmit",
     "lint:check": "prettier --check . && eslint .",
     "lint:fix": "prettier --write . && eslint . --fix",
     "release": "pnpm lint:check && NODE_ENV=production zotero-plugin release",
-    "test": "node scripts/copy-opencv.mjs && zotero-plugin test --no-watch",
+    "test": "zotero-plugin test --no-watch",
     "update-deps": "pnpm update --save"
   },
   "dependencies": {
@@ -47,7 +47,6 @@
     "@janbaykara/zotero-os-file-drop": "workspace:*",
     "@janbaykara/zotero-preact": "workspace:*",
     "@janbaykara/zotero-tailwind-theme": "workspace:*",
-    "@techstark/opencv-js": "5.0.0-release.1",
     "concurrently": "^9.2.1",
     "epubjs": "^0.3.93",
     "exifr": "^7.1.3",
